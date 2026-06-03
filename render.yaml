@@ -1,0 +1,31 @@
+services:
+  # ─── Flask Backend ────────────────────────────────────────────────────────────
+  - type: web
+    name: voyageiq-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: voyageiq-db
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://voyageiq.vercel.app
+      - key: CORS_ORIGINS
+        value: https://voyageiq.vercel.app,https://voyageiq-ai.vercel.app
+    healthCheckPath: /api/health
+
+  # ─── PostgreSQL Database ──────────────────────────────────────────────────────
+databases:
+  - name: voyageiq-db
+    plan: free
+    databaseName: voyageiq
+    user: voyageiq_user

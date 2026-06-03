@@ -1,0 +1,69 @@
+import os
+from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Render gives postgres:// but SQLAlchemy needs postgresql://
+def _fix_db_url(url: str) -> str:
+    if url and url.startswith('postgres://'):
+        return url.replace('postgres://', 'postgresql://', 1)
+    return url
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'voyageiq-secret-key-2024-maritime')
+    SQLALCHEMY_DATABASE_URI = _fix_db_url(os.environ.get(
+        'DATABASE_URL',
+        'postgresql://voyageiq:voyageiq123@localhost:5432/voyageiq_db'
+    ))
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
+
+    # JWT
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'voyageiq-jwt-secret-2024')
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+
+    # File uploads
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
+    ALLOWED_EXTENSIONS = {'pdf', 'xlsx', 'xls', 'csv'}
+
+    # OpenAI
+    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+    # Weather API (Open-Meteo - free, no key required)
+    WEATHER_API_BASE = 'https://api.open-meteo.com/v1'
+    MARINE_API_BASE = 'https://marine-api.open-meteo.com/v1'
+
+    # CORS — allow Vercel domains + localhost
+    CORS_ORIGINS = os.environ.get(
+        'CORS_ORIGINS',
+        'http://localhost:5173,http://localhost:3000'
+    ).split(',')
+
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_ECHO = False
+
+
+class ProductionConfig(Config):
+    DEBUG = False
+    SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'pool_size': 5,
+        'max_overflow': 10,
+    }
+
+
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'default': DevelopmentConfig
+}

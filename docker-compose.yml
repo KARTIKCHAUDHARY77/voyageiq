@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: voyageiq_postgres
+    environment:
+      POSTGRES_DB: voyageiq_db
+      POSTGRES_USER: voyageiq
+      POSTGRES_PASSWORD: voyageiq123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voyageiq -d voyageiq_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voyageiq_network
+
+  # Flask Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voyageiq_backend
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://voyageiq:voyageiq123@postgres:5432/voyageiq_db
+      SECRET_KEY: ${SECRET_KEY:-voyageiq-super-secret-key-2024}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-voyageiq-jwt-secret-2024}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://frontend:3000
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - voyageiq_network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voyageiq_frontend
+    environment:
+      VITE_API_URL: http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - voyageiq_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  voyageiq_network:
+    driver: bridge
