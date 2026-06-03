@@ -1,14 +1,12 @@
-// VoyageIQ AI — Maritime Intelligence Platform
-// Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
-// Unauthorized copying or use of this file is strictly prohibited.
-// Contact: 2512520007@geu.ac.in
+# VoyageIQ AI — Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
+COPY .npmrc ./
 
-# Use --legacy-peer-deps to handle vite v8 + plugin-react peer dep mismatch
+# Install with legacy-peer-deps (vite v5 + plugin-react compatibility)
 RUN npm install --legacy-peer-deps
 
 COPY . .

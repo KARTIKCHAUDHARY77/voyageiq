@@ -1,3 +1,4 @@
+# VoyageIQ AI — Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -24,4 +25,4 @@ ENV PORT=5000
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "run:app"]
