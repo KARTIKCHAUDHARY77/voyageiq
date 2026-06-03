@@ -42,8 +42,16 @@ class Config:
     WEATHER_API_BASE = 'https://api.open-meteo.com/v1'
     MARINE_API_BASE = 'https://marine-api.open-meteo.com/v1'
     
-    # App Settings
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
+    # CORS — allow localhost dev + any Vercel deployment
+    _cors_env = os.environ.get('CORS_ORIGINS', '')
+    CORS_ORIGINS = _cors_env.split(',') if _cors_env else [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'https://voyageiq.vercel.app',
+        'https://voyageiq-frontend.vercel.app',
+    ]
+    # Also allow any *.vercel.app subdomain (handles preview deployments)
+    CORS_SUPPORTS_CREDENTIALS = True
 
 
 class DevelopmentConfig(Config):

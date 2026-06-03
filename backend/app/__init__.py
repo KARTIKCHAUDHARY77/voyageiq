@@ -32,7 +32,12 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     JWTManager(app)
-    CORS(app, origins=app.config['CORS_ORIGINS'], supports_credentials=True)
+    CORS(app,
+         origins=app.config['CORS_ORIGINS'],
+         supports_credentials=True,
+         allow_headers=['Content-Type', 'Authorization'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    )
     
     # Register blueprints
     from .routes.auth import auth_bp

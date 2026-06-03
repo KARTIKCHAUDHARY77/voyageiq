@@ -1,11 +1,11 @@
 services:
-  # ─── Flask Backend ────────────────────────────────────────────────────────────
+  # ─── Flask Backend ───────────────────────────────────────────────────────
   - type: web
-    name: voyageiq-backend
+    name: voyageiq-api
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: gunicorn "app:create_app('production')" --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: FLASK_ENV
         value: production
@@ -17,15 +17,14 @@ services:
         fromDatabase:
           name: voyageiq-db
           property: connectionString
-      - key: FRONTEND_URL
-        value: https://voyageiq.vercel.app
       - key: CORS_ORIGINS
-        value: https://voyageiq.vercel.app,https://voyageiq-ai.vercel.app
-    healthCheckPath: /api/health
+        value: https://voyageiq.vercel.app,https://voyageiq-frontend.vercel.app
+      - key: PYTHON_VERSION
+        value: 3.11.9
 
-  # ─── PostgreSQL Database ──────────────────────────────────────────────────────
+  # ─── PostgreSQL Database ─────────────────────────────────────────────────
 databases:
   - name: voyageiq-db
-    plan: free
     databaseName: voyageiq
     user: voyageiq_user
+    plan: free
