@@ -1,7 +1,3 @@
-// VoyageIQ AI — Maritime Intelligence Platform
-// Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
-// Unauthorized copying or use of this file is strictly prohibited.
-// Contact: 2512520007@geu.ac.in
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -67,8 +63,7 @@ export default function VesselDetailPage() {
   )
   if (!vessel) return <div className="text-center py-20 text-navy-400">Vessel not found</div>
 
-  const posPoints: [number, number][] = positions.map((p: any) => [p.latitude as number, p.longitude as number] as [number, number]).filter(Boolean)
-
+  const posPoints: [number, number][] = positions.map((p: any) => [p.latitude, p.longitude]).filter(Boolean)
   const gradeColor = health?.grade_color || (health?.total_score && health.total_score >= 90 ? 'green' : health?.total_score && health.total_score >= 70 ? 'teal' : health?.total_score && health.total_score >= 50 ? 'yellow' : 'red') || 'teal'
 
   return (

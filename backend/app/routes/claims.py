@@ -4,6 +4,7 @@ Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 Unauthorized copying or use of this file is strictly prohibited.
 Contact: 2512520007@geu.ac.in
 """
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime

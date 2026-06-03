@@ -4,6 +4,7 @@ Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 Unauthorized copying or use of this file is strictly prohibited.
 Contact: 2512520007@geu.ac.in
 """
+
 """
 VoyageIQ AI - AI Copilot Blueprint
 Chat interface backed by OpenAI GPT-4o-mini with rule-based fallback.
@@ -60,8 +61,7 @@ def _format_fuel_reports(reports: list) -> str:
         rpm = float(r.rpm) if r.rpm else 0
         bf = r.wind_force_bft or 0
         lines.append(f"  • {date}: {fuel:.1f} MT consumed, {speed:.1f} kn SOG, RPM {rpm:.0f}, Bft {bf}")
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 
 def _build_vessel_context(vessel_id: str | None, voyage_id: str | None) -> dict:
@@ -115,8 +115,7 @@ def _build_system_prompt(context: dict) -> str:
         "fuel optimisation, voyage analytics, and charter party claims analysis. "
         "Respond in a professional, concise maritime-expert tone. "
         "Always provide actionable recommendations backed by data. "
-        "Structure longer answers with bullet points for clarity.
-"
+        "Structure longer answers with bullet points for clarity.\n"
     ]
 
     vessel = context.get('vessel')
@@ -126,8 +125,7 @@ def _build_system_prompt(context: dict) -> str:
             f"Type: {vessel.vessel_type} | "
             f"DWT: {float(vessel.deadweight_tonnage) if vessel.deadweight_tonnage else 'N/A'} MT | "
             f"Design Speed: {float(vessel.design_speed) if vessel.design_speed else 'N/A'} kn | "
-            f"Warranted Consumption: {float(vessel.warranted_consumption) if vessel.warranted_consumption else 'N/A'} MT/day
-"
+            f"Warranted Consumption: {float(vessel.warranted_consumption) if vessel.warranted_consumption else 'N/A'} MT/day\n"
         )
 
     voyage = context.get('voyage')
@@ -137,15 +135,12 @@ def _build_system_prompt(context: dict) -> str:
             f"{voyage.departure_port} → {voyage.arrival_port} | "
             f"Status: {voyage.status} | "
             f"CP Speed: {float(voyage.charter_party_speed) if voyage.charter_party_speed else 'N/A'} kn | "
-            f"CP Consumption: {float(voyage.charter_party_consumption) if voyage.charter_party_consumption else 'N/A'} MT/day
-"
+            f"CP Consumption: {float(voyage.charter_party_consumption) if voyage.charter_party_consumption else 'N/A'} MT/day\n"
         )
 
     reports = context.get('reports', [])
     if reports:
-        parts.append(f"Recent Performance Data (last {len(reports)} noon reports):
-{_format_fuel_reports(reports)}
-")
+        parts.append(f"Recent Performance Data (last {len(reports)} noon reports):\n{_format_fuel_reports(reports)}\n")
 
     claims = context.get('claims', [])
     open_claims = [c for c in claims if c.status == 'open']
@@ -155,13 +150,9 @@ def _build_system_prompt(context: dict) -> str:
             for c in open_claims
             if c.estimated_impact_usd
         ]
-        parts.append(f"Open Claims ({len(open_claims)}):
-" + "
-".join(claim_lines) + "
-")
+        parts.append(f"Open Claims ({len(open_claims)}):\n" + "\n".join(claim_lines) + "\n")
 
-    return "
-".join(parts)
+    return "\n".join(parts)
 
 
 def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str, list, list]:
@@ -192,40 +183,22 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
             avg_rpm = sum(rpms) / len(rpms) if rpms else 0
 
         text = (
-            f"**Fuel Consumption Analysis — {vessel_name}**
-
-"
-            f"Based on the {len(recent)} most recent noon reports:
-"
-            f"• Average daily fuel consumption: **{avg_fuel:.1f} MT/day**
-"
-            f"• Average wind force: **Beaufort {avg_bf:.1f}**
-"
-            f"• Average RPM: **{avg_rpm:.0f}**
-
-"
-            "**Likely causes of increased consumption:**
-"
-            "1. **Adverse weather** — Headwinds (Bft 5+) can increase fuel burn by 10–30%.
-"
+            f"**Fuel Consumption Analysis — {vessel_name}**\n\n"
+            f"Based on the {len(recent)} most recent noon reports:\n"
+            f"• Average daily fuel consumption: **{avg_fuel:.1f} MT/day**\n"
+            f"• Average wind force: **Beaufort {avg_bf:.1f}**\n"
+            f"• Average RPM: **{avg_rpm:.0f}**\n\n"
+            "**Likely causes of increased consumption:**\n"
+            "1. **Adverse weather** — Headwinds (Bft 5+) can increase fuel burn by 10–30%.\n"
             "2. **Speed increase** — Fuel consumption scales with the cube of speed; a 1-knot increase "
-            "at 14 kn can raise consumption by ~20%.
-"
-            "3. **Propeller fouling** — Biofouling adds resistance, reducing efficiency.
-"
-            "4. **Engine derating / high RPM** — RPM above design point wastes fuel.
-"
-            "5. **Heavy displacement / trim** — Poor trim adds up to 5% resistance.
-
-"
-            "**Recommended actions:**
-"
-            "• Cross-check against Charter Party warranted figures to quantify the variance.
-"
-            "• Review trim logs and optimise fore/aft draft balance.
-"
-            "• Consider slow-steaming if schedule permits — each 0.5-knot reduction saves ~8% fuel.
-"
+            "at 14 kn can raise consumption by ~20%.\n"
+            "3. **Propeller fouling** — Biofouling adds resistance, reducing efficiency.\n"
+            "4. **Engine derating / high RPM** — RPM above design point wastes fuel.\n"
+            "5. **Heavy displacement / trim** — Poor trim adds up to 5% resistance.\n\n"
+            "**Recommended actions:**\n"
+            "• Cross-check against Charter Party warranted figures to quantify the variance.\n"
+            "• Review trim logs and optimise fore/aft draft balance.\n"
+            "• Consider slow-steaming if schedule permits — each 0.5-knot reduction saves ~8% fuel.\n"
             "• Schedule next underwater inspection if more than 6 months since last drydock."
         )
         recommendations = [
@@ -250,36 +223,22 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
         speed_gap = ""
         if cp_speed and avg_sog:
             gap = cp_speed - avg_sog
-            speed_gap = f"Speed gap vs CP: **{gap:+.2f} kn** (CP warranted {cp_speed:.1f} kn, actual {avg_sog:.1f} kn).
-
-"
+            speed_gap = f"Speed gap vs CP: **{gap:+.2f} kn** (CP warranted {cp_speed:.1f} kn, actual {avg_sog:.1f} kn).\n\n"
             if gap > 0.5:
                 warnings.append(f"Speed is {gap:.2f} kn below CP-warranted speed — potential underperformance claim exposure.")
 
         text = (
-            f"**Vessel Underperformance Assessment — {vessel_name}**
-
-"
+            f"**Vessel Underperformance Assessment — {vessel_name}**\n\n"
             f"{speed_gap}"
-            "**Primary underperformance drivers to investigate:**
-"
-            "1. **Hull & Propeller Fouling** — Biofouling causes up to 10–15% power loss and is the #1 reason for speed loss.
-"
-            "2. **Engine Derating** — Main engine may be operating below rated MCR, limiting shaft power.
-"
-            "3. **Adverse Current** — Ocean currents opposing the vessel reduce SOG without affecting STW.
-"
-            "4. **Displacement** — Heavy cargo loading increases draft and resistance.
-"
-            "5. **Weather Conditions** — Sustained Bft 5+ head seas reduce speed significantly.
-
-"
-            "**Charter Party Implications:**
-"
-            "• If weather-adjusted speed is still below CP warranted speed, Owners may be liable for underperformance claims.
-"
-            "• Ensure weather logs are properly documented (NOAA/ECMWF data) to distinguish weather from mechanical causes.
-"
+            "**Primary underperformance drivers to investigate:**\n"
+            "1. **Hull & Propeller Fouling** — Biofouling causes up to 10–15% power loss and is the #1 reason for speed loss.\n"
+            "2. **Engine Derating** — Main engine may be operating below rated MCR, limiting shaft power.\n"
+            "3. **Adverse Current** — Ocean currents opposing the vessel reduce SOG without affecting STW.\n"
+            "4. **Displacement** — Heavy cargo loading increases draft and resistance.\n"
+            "5. **Weather Conditions** — Sustained Bft 5+ head seas reduce speed significantly.\n\n"
+            "**Charter Party Implications:**\n"
+            "• If weather-adjusted speed is still below CP warranted speed, Owners may be liable for underperformance claims.\n"
+            "• Ensure weather logs are properly documented (NOAA/ECMWF data) to distinguish weather from mechanical causes.\n"
             "• Review CP speed/consumption warranty clauses for applicable corrections (NYPE, BALTIME, etc.)."
         )
         recommendations = [
@@ -293,48 +252,24 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
     # ------------------------------------------------------------------ #
     elif intent == "fuel_saving":
         text = (
-            f"**Fuel Saving Recommendations — {vessel_name}**
-
-"
-            "**1. Speed Optimisation (Slow Steaming)**
-"
-            "   • Fuel consumption ∝ speed³. Reducing speed from 14 to 12 kn saves ~27% fuel.
-"
-            "   • Identify schedule slack and request charterer approval for slow steaming.
-
-"
-            "**2. Trim Optimisation**
-"
-            "   • Optimal trim can reduce resistance by 3–5%. Use trim optimisation tables.
-"
-            "   • Aim for even keel or slight trim by stern within stability limits.
-
-"
-            "**3. Weather Routing**
-"
-            "   • Use certified weather routing services to avoid head seas.
-"
-            "   • Tailwinds and favourable currents can save 5–8% fuel.
-
-"
-            "**4. Engine Load Management**
-"
-            "   • Operate ME at 75–85% MCR for best SFOC (specific fuel oil consumption).
-"
-            "   • Avoid excessive generator running — use shore power at berth.
-
-"
-            "**5. Hull Maintenance**
-"
-            "   • Keep hull clean — schedule underwater cleaning every 6–12 months.
-"
-            "   • Apply low-friction antifouling coating at drydock.
-
-"
-            "**6. Voyage Planning**
-"
-            "   • Use JIT (just-in-time) arrival to avoid waiting at anchor at full speed.
-"
+            f"**Fuel Saving Recommendations — {vessel_name}**\n\n"
+            "**1. Speed Optimisation (Slow Steaming)**\n"
+            "   • Fuel consumption ∝ speed³. Reducing speed from 14 to 12 kn saves ~27% fuel.\n"
+            "   • Identify schedule slack and request charterer approval for slow steaming.\n\n"
+            "**2. Trim Optimisation**\n"
+            "   • Optimal trim can reduce resistance by 3–5%. Use trim optimisation tables.\n"
+            "   • Aim for even keel or slight trim by stern within stability limits.\n\n"
+            "**3. Weather Routing**\n"
+            "   • Use certified weather routing services to avoid head seas.\n"
+            "   • Tailwinds and favourable currents can save 5–8% fuel.\n\n"
+            "**4. Engine Load Management**\n"
+            "   • Operate ME at 75–85% MCR for best SFOC (specific fuel oil consumption).\n"
+            "   • Avoid excessive generator running — use shore power at berth.\n\n"
+            "**5. Hull Maintenance**\n"
+            "   • Keep hull clean — schedule underwater cleaning every 6–12 months.\n"
+            "   • Apply low-friction antifouling coating at drydock.\n\n"
+            "**6. Voyage Planning**\n"
+            "   • Use JIT (just-in-time) arrival to avoid waiting at anchor at full speed.\n"
             "   • Coordinate with port for berth readiness before departure."
         )
         recommendations = [
@@ -349,35 +284,20 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
     elif intent == "route":
         voyage_info = ""
         if voyage:
-            voyage_info = f"Current voyage: **{voyage.departure_port} → {voyage.arrival_port}**
-
-"
+            voyage_info = f"Current voyage: **{voyage.departure_port} → {voyage.arrival_port}**\n\n"
 
         text = (
-            f"**Route Optimisation Recommendations — {vessel_name}**
-
-"
+            f"**Route Optimisation Recommendations — {vessel_name}**\n\n"
             f"{voyage_info}"
-            "**Route Selection Principles:**
-"
-            "1. **Optimal (Balanced)** — Best trade-off between fuel, time, and safety. Recommended as default.
-"
-            "2. **Eco Route** — Diverts slightly to avoid head seas; 3–8% fuel saving but adds 6–12 hours.
-"
-            "3. **Fastest Route** — Direct great-circle; highest speed/fuel; use only if schedule-critical.
-"
-            "4. **Safest Route** — Avoids storm zones; ideal for heavy weather periods or sensitive cargo.
-
-"
-            "**Current Weather Considerations:**
-"
-            "• Check for active cyclone/typhoon advisories in the planned area.
-"
-            "• Monitor North Atlantic/Pacific ridge for favourable routing in winter months.
-"
-            "• Review current systems (ENSO, Gulf Stream, Kuroshio) that affect speed made good.
-
-"
+            "**Route Selection Principles:**\n"
+            "1. **Optimal (Balanced)** — Best trade-off between fuel, time, and safety. Recommended as default.\n"
+            "2. **Eco Route** — Diverts slightly to avoid head seas; 3–8% fuel saving but adds 6–12 hours.\n"
+            "3. **Fastest Route** — Direct great-circle; highest speed/fuel; use only if schedule-critical.\n"
+            "4. **Safest Route** — Avoids storm zones; ideal for heavy weather periods or sensitive cargo.\n\n"
+            "**Current Weather Considerations:**\n"
+            "• Check for active cyclone/typhoon advisories in the planned area.\n"
+            "• Monitor North Atlantic/Pacific ridge for favourable routing in winter months.\n"
+            "• Review current systems (ENSO, Gulf Stream, Kuroshio) that affect speed made good.\n\n"
             "**Use the Route Optimisation tool** in the VoyageIQ platform to generate and compare all four route variants "
             "with real-time weather overlays and fuel cost breakdowns."
         )
@@ -393,8 +313,7 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
         open_claims = [c for c in claims if c.status == 'open']
         total_impact = sum(float(c.estimated_impact_usd) for c in open_claims if c.estimated_impact_usd)
 
-        claim_lines = "
-".join([
+        claim_lines = "\n".join([
             f"  • **{c.claim_type}** | Severity: {c.severity.upper()} | "
             f"Impact: ${float(c.estimated_impact_usd):,.0f} | Period: "
             f"{c.period_start.isoformat() if c.period_start else 'N/A'} – "
@@ -403,25 +322,14 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
         ]) or "  No open claims found."
 
         text = (
-            f"**Claims Summary — {vessel_name}**
-
-"
-            f"**Open Claims: {len(open_claims)} | Estimated Total Impact: ${total_impact:,.0f}**
-
-"
-            f"{claim_lines}
-
-"
-            "**Claim Management Guidance:**
-"
-            "• Ensure all supporting data (weather logs, speed logs, ME performance records) is archived.
-"
-            "• Review Charter Party clauses for speed/consumption warranties and applicable corrections.
-"
-            "• For underperformance claims, obtain independent weather data (NOAA/ECMWF) to support your position.
-"
-            "• Engage P&I Club or legal counsel for claims exceeding $50,000.
-"
+            f"**Claims Summary — {vessel_name}**\n\n"
+            f"**Open Claims: {len(open_claims)} | Estimated Total Impact: ${total_impact:,.0f}**\n\n"
+            f"{claim_lines}\n\n"
+            "**Claim Management Guidance:**\n"
+            "• Ensure all supporting data (weather logs, speed logs, ME performance records) is archived.\n"
+            "• Review Charter Party clauses for speed/consumption warranties and applicable corrections.\n"
+            "• For underperformance claims, obtain independent weather data (NOAA/ECMWF) to support your position.\n"
+            "• Engage P&I Club or legal counsel for claims exceeding $50,000.\n"
             "• Issue formal Protest Letters for weather-related performance deductions."
         )
         if total_impact > 100_000:
@@ -442,22 +350,14 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
 
         scores_text = ""
         if perf_score is not None:
-            scores_text += f"• Performance Score: **{perf_score:.1f}/100**
-"
+            scores_text += f"• Performance Score: **{perf_score:.1f}/100**\n"
         if health_score is not None:
-            scores_text += f"• Health Score: **{health_score:.1f}/100**
-"
+            scores_text += f"• Health Score: **{health_score:.1f}/100**\n"
 
         text = (
-            f"**Vessel Status Overview — {vessel_name}**
-
-"
+            f"**Vessel Status Overview — {vessel_name}**\n\n"
             f"{scores_text}"
-            f"
-**Recent Performance (noon reports):**
-{status_lines}
-
-"
+            f"\n**Recent Performance (noon reports):**\n{status_lines}\n\n"
             "Use the VoyageIQ dashboard for interactive charts and trend analysis. "
             "All metrics update automatically as new noon reports are uploaded."
         )
@@ -469,28 +369,16 @@ def _rule_based_response(intent: str, message: str, context: dict) -> tuple[str,
     # ------------------------------------------------------------------ #
     else:  # general
         text = (
-            "I'm **VoyageIQ Copilot**, your maritime intelligence assistant. I can help you with:
-
-"
-            "• **Fuel Analysis** — consumption trends, variance from CP, optimisation tips
-"
-            "• **Performance Assessment** — speed/consumption gap analysis, underperformance detection
-"
-            "• **Route Recommendations** — optimal, eco, fastest, and safest route options
-"
-            "• **Claims Management** — open claims, exposure quantification, documentation guidance
-"
-            "• **Vessel Status** — real-time performance scores and noon report summaries
-
-"
-            "Try asking something like:
-"
-            "  *\"Why has fuel consumption increased this week?\"*
-"
-            "  *\"What are the best fuel-saving measures available?\"*
-"
-            "  *\"Show me the current open claims and their impact.\"*
-"
+            "I'm **VoyageIQ Copilot**, your maritime intelligence assistant. I can help you with:\n\n"
+            "• **Fuel Analysis** — consumption trends, variance from CP, optimisation tips\n"
+            "• **Performance Assessment** — speed/consumption gap analysis, underperformance detection\n"
+            "• **Route Recommendations** — optimal, eco, fastest, and safest route options\n"
+            "• **Claims Management** — open claims, exposure quantification, documentation guidance\n"
+            "• **Vessel Status** — real-time performance scores and noon report summaries\n\n"
+            "Try asking something like:\n"
+            "  *\"Why has fuel consumption increased this week?\"*\n"
+            "  *\"What are the best fuel-saving measures available?\"*\n"
+            "  *\"Show me the current open claims and their impact.\"*\n"
             "  *\"What is the recommended route from Singapore to Rotterdam?\"*"
         )
         recommendations = ["Provide vessel and voyage context for more specific analysis."]
