@@ -86,71 +86,59 @@ def _haversine(lat1, lon1, lat2, lon2):
 # ---------------------------------------------------------------------------
 def _sample_weather_025deg(lat1, lon1, lat2, lon2, n_points=8):
     """
-    Sample weather data along route at 0.25° grid resolution.
-    Returns list of weather observations at equally-spaced route points.
+    Sample weather along route at 0.25° grid resolution.
+    Always returns results — uses fallback values if API is unreachable.
     """
     OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
     MARINE_API = "https://marine-api.open-meteo.com/v1/marine"
     samples = []
 
     for i in range(n_points):
-        frac = i / max(n_points - 1, 1)
-        # Snap to nearest 0.25° grid point
+        frac    = i / max(n_points - 1, 1)
         raw_lat = lat1 + frac * (lat2 - lat1)
         raw_lon = lon1 + frac * (lon2 - lon1)
-        lat = round(raw_lat * 4) / 4   # snap to 0.25°
-        lon = round(raw_lon * 4) / 4
+        lat     = round(raw_lat * 4) / 4   # snap to 0.25° grid
+        lon     = round(raw_lon * 4) / 4
 
-        obs = {"lat": lat, "lon": lon, "frac": round(frac, 2)}
+        obs = {"lat": lat, "lon": lon, "frac": round(frac, 2),
+               "wind_speed_kn": 10.0, "wind_dir": 225, "precip": 0,
+               "wave_height": 1.2, "swell_height": 0.8,
+               "current_speed": 0.3, "current_dir": 180, "beaufort": 3}
         try:
-            # Atmospheric weather
             atm = requests.get(OPEN_METEO, params={
                 "latitude": lat, "longitude": lon,
-                "current": "wind_speed_10m,wind_direction_10m,precipitation,weather_code",
+                "current": "wind_speed_10m,wind_direction_10m,precipitation",
                 "wind_speed_unit": "kn",
-            }, timeout=5).json()
+            }, timeout=4).json()
             curr = atm.get("current", {})
-            obs["wind_speed_kn"] = round(curr.get("wind_speed_10m", 10), 1)
-            obs["wind_dir"]      = round(curr.get("wind_direction_10m", 0))
-            obs["precip"]        = curr.get("precipitation", 0)
+            obs["wind_speed_kn"] = round(float(curr.get("wind_speed_10m", 10)), 1)
+            obs["wind_dir"]      = round(float(curr.get("wind_direction_10m", 225)))
+            obs["precip"]        = float(curr.get("precipitation", 0))
         except Exception:
-            obs["wind_speed_kn"] = 12.0
-            obs["wind_dir"]      = 225
-            obs["precip"]        = 0
+            pass  # keep fallback
 
         try:
-            # Marine weather
             mar = requests.get(MARINE_API, params={
                 "latitude": lat, "longitude": lon,
                 "current": "wave_height,swell_wave_height,ocean_current_velocity,ocean_current_direction",
-            }, timeout=5).json()
+            }, timeout=4).json()
             curr_m = mar.get("current", {})
-            obs["wave_height"]    = round(curr_m.get("wave_height", 1.0), 2)
-            obs["swell_height"]   = round(curr_m.get("swell_wave_height", 0.8), 2)
-            obs["current_speed"]  = round(curr_m.get("ocean_current_velocity", 0.3), 2)
-            obs["current_dir"]    = round(curr_m.get("ocean_current_direction", 180))
+            obs["wave_height"]   = round(float(curr_m.get("wave_height", 1.2)), 2)
+            obs["swell_height"]  = round(float(curr_m.get("swell_wave_height", 0.8)), 2)
+            obs["current_speed"] = round(float(curr_m.get("ocean_current_velocity", 0.3)), 2)
+            obs["current_dir"]   = round(float(curr_m.get("ocean_current_direction", 180)))
         except Exception:
-            obs["wave_height"]   = 1.2
-            obs["swell_height"]  = 0.8
-            obs["current_speed"] = 0.3
-            obs["current_dir"]   = 180
+            pass  # keep fallback
 
-        # Beaufort scale
+        # Beaufort from wind speed
         ws = obs["wind_speed_kn"]
-        if ws < 1: obs["beaufort"] = 0
-        elif ws < 4: obs["beaufort"] = 1
-        elif ws < 7: obs["beaufort"] = 2
-        elif ws < 11: obs["beaufort"] = 3
-        elif ws < 17: obs["beaufort"] = 4
-        elif ws < 22: obs["beaufort"] = 5
-        elif ws < 28: obs["beaufort"] = 6
-        elif ws < 34: obs["beaufort"] = 7
-        elif ws < 41: obs["beaufort"] = 8
-        else: obs["beaufort"] = 9
-
+        obs["beaufort"] = (0 if ws < 1 else 1 if ws < 4 else 2 if ws < 7 else 3 if ws < 11
+                           else 4 if ws < 17 else 5 if ws < 22 else 6 if ws < 28
+                           else 7 if ws < 34 else 8 if ws < 41 else 9)
         samples.append(obs)
 
     return samples
+
 
 # ---------------------------------------------------------------------------
 # Vessel type fuel coefficients
