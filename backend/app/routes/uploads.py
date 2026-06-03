@@ -1,4 +1,10 @@
 """
+VoyageIQ AI — Maritime Intelligence Platform
+Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
+Unauthorized copying or use of this file is strictly prohibited.
+Contact: 2512520007@geu.ac.in
+"""
+"""
 VoyageIQ AI - Report Upload & Parsing Blueprint
 Handles PDF, Excel, and CSV noon-report uploads with automatic field extraction.
 """
@@ -268,7 +274,8 @@ def _parse_pdf(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     try:
         record = {}
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            full_text = "\n".join(page.extract_text() or '' for page in pdf.pages)
+            full_text = "
+".join(page.extract_text() or '' for page in pdf.pages)
 
         for pattern, field_name in PDF_PATTERNS:
             match = re.search(pattern, full_text, re.IGNORECASE)

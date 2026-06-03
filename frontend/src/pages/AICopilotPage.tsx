@@ -1,3 +1,7 @@
+// VoyageIQ AI — Maritime Intelligence Platform
+// Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
+// Unauthorized copying or use of this file is strictly prohibited.
+// Contact: 2512520007@geu.ac.in
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -51,12 +55,30 @@ const SUGGESTED_PROMPTS = [
 
 const MOCK_AI_RESPONSES: Record<string, Omit<ChatMessage, 'id' | 'conversation_id' | 'role' | 'timestamp'>> = {
   fuel: {
-    content: `**Fuel Consumption Analysis**\n\nBased on the noon reports for *MV Atlantic Pioneer* on voyage VYG-2024-001, I've identified several contributing factors to the increased fuel consumption:\n\n1. **Adverse Weather** – The vessel encountered Beaufort 6-7 conditions between Jan 15-20, resulting in an estimated **+12% consumption increase**.\n\n2. **Speed Variance** – Average speed was 11.2 knots vs CP 13.5 knots. This caused longer sea passage time, adding approximately 140 MT of extra fuel.\n\n3. **Engine Performance** – ME specific fuel oil consumption (SFOC) shows a **3.2% degradation** compared to shop test data, suggesting possible wear or adjustment needed.\n\nThe total fuel overrun is **140 MT** valued at approximately **$112,000** at current bunker prices.`,
+    content: `**Fuel Consumption Analysis**
+
+Based on the noon reports for *MV Atlantic Pioneer* on voyage VYG-2024-001, I've identified several contributing factors to the increased fuel consumption:
+
+1. **Adverse Weather** – The vessel encountered Beaufort 6-7 conditions between Jan 15-20, resulting in an estimated **+12% consumption increase**.
+
+2. **Speed Variance** – Average speed was 11.2 knots vs CP 13.5 knots. This caused longer sea passage time, adding approximately 140 MT of extra fuel.
+
+3. **Engine Performance** – ME specific fuel oil consumption (SFOC) shows a **3.2% degradation** compared to shop test data, suggesting possible wear or adjustment needed.
+
+The total fuel overrun is **140 MT** valued at approximately **$112,000** at current bunker prices.`,
     recommendations: [{ id: 'r1', title: 'Schedule engine tuning', description: 'ME SFOC degradation of 3.2% suggests adjustment is needed at next port call.', estimated_savings: 45000 }, { id: 'r2', title: 'Review CP weather allowances', description: 'Apply weather-based allowances to the charter party claim for the Jan 15-20 period.' }],
     warnings: ['Charter party claim window for this voyage closes in 14 days.'],
   },
   default: {
-    content: `**Maritime AI Analysis Complete**\n\nI've reviewed the available data for your query. Here is my assessment:\n\n- Fleet average fuel efficiency is **3.2% below** target\n- 2 active charter party claims require immediate attention\n- Optimal route via the Suez Canal saves an estimated **$48,000** in fuel\n\nWould you like me to drill down into any specific area?`,
+    content: `**Maritime AI Analysis Complete**
+
+I've reviewed the available data for your query. Here is my assessment:
+
+- Fleet average fuel efficiency is **3.2% below** target
+- 2 active charter party claims require immediate attention
+- Optimal route via the Suez Canal saves an estimated **$48,000** in fuel
+
+Would you like me to drill down into any specific area?`,
     recommendations: [{ id: 'r3', title: 'Optimize trim settings', description: 'Adjusting trim by 0.5m stern could reduce fuel consumption by 2-3%.', estimated_savings: 22000 }],
     warnings: [],
   },
@@ -65,7 +87,8 @@ const MOCK_AI_RESPONSES: Record<string, Omit<ChatMessage, 'id' | 'conversation_i
 // ── Markdown renderer (simple) ────────────────────────────────────────────────
 
 function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split('\n')
+  const lines = text.split('
+')
   return lines.map((line, i) => {
     // Bold **text**
     const bold = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -203,7 +226,16 @@ export default function AICopilotPage() {
       id: 'greeting',
       conversation_id: '',
       role: 'assistant',
-      content: `**Welcome to VoyageIQ AI Copilot!** 🚢\n\nI'm your AI-powered maritime operations assistant. I can help you with:\n\n- **Performance Analysis** – Speed, fuel, and efficiency insights\n- **Charter Party Claims** – Detection and dispute support\n- **Route Optimization** – Weather-aware routing\n- **Compliance Monitoring** – MARPOL, CII, and reporting\n\nSelect a vessel above to give me context, then ask me anything!`,
+      content: `**Welcome to VoyageIQ AI Copilot!** 🚢
+
+I'm your AI-powered maritime operations assistant. I can help you with:
+
+- **Performance Analysis** – Speed, fuel, and efficiency insights
+- **Charter Party Claims** – Detection and dispute support
+- **Route Optimization** – Weather-aware routing
+- **Compliance Monitoring** – MARPOL, CII, and reporting
+
+Select a vessel above to give me context, then ask me anything!`,
       timestamp: new Date().toISOString(),
     }
     setMessages([greeting])
