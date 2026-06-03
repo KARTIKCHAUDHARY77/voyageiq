@@ -68,7 +68,16 @@ def create_app(config_name=None):
         return {'status': 'healthy', 'service': 'VoyageIQ API', 'version': '1.0.0'}
     
     with app.app_context():
-        db.create_all()
+        try:
+            # checkfirst=True prevents duplicate type errors on PostgreSQL
+            db.create_all(checkfirst=True)
+        except Exception as e:
+            print(f"db.create_all warning (continuing): {e}")
+            try:
+                db.session.rollback()
+                db.create_all(checkfirst=True)
+            except Exception:
+                pass
         _seed_demo_data()
     
     return app
