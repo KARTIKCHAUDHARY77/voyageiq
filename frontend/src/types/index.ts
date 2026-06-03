@@ -1,3 +1,5 @@
+// ─── Core Entity Types ────────────────────────────────────────────────────────
+
 export interface User {
   id: string
   email: string
@@ -11,7 +13,9 @@ export interface User {
 export interface Vessel {
   id: string
   imo_number: string
+  imo?: string               // alias used in some pages
   name: string
+  type?: string              // alias for vessel_type
   vessel_type: string
   flag: string
   built_year: number
@@ -28,6 +32,8 @@ export interface Vessel {
   classification_society: string
   status: 'active' | 'dry_dock' | 'laid_up' | 'scrapped'
   image_url?: string
+  health_score?: number
+  active_voyage?: string
   created_at: string
 }
 
@@ -42,6 +48,8 @@ export interface Voyage {
   departure_lon?: number
   arrival_lat?: number
   arrival_lon?: number
+  departure_date?: string    // used in some pages
+  arrival_date?: string      // used in some pages
   etd?: string
   eta?: string
   atd?: string
@@ -89,24 +97,50 @@ export interface NoonReport {
   created_at: string
 }
 
+// ─── Claim Types ──────────────────────────────────────────────────────────────
+
+export type ClaimType =
+  | 'speed_loss'
+  | 'excess_consumption'
+  | 'off_hire'
+  | 'weather_damage'
+  | 'cargo_damage'
+  | 'other'
+
+export type ClaimStatus =
+  | 'open'
+  | 'pending'
+  | 'acknowledged'
+  | 'disputed'
+  | 'resolved'
+  | 'closed'
+
+export type ClaimSeverity = 'low' | 'medium' | 'high' | 'critical'
+
 export interface Claim {
   id: string
   voyage_id: string
   vessel_id: string
   claim_type: string
+  type?: string              // alias for claim_type
   detected_date: string
   period_start?: string
   period_end?: string
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  status: 'open' | 'acknowledged' | 'disputed' | 'resolved' | 'closed'
+  severity: ClaimSeverity
+  status: ClaimStatus
   expected_value?: number
   actual_value?: number
   variance?: number
   unit?: string
   estimated_impact_usd?: number
   description?: string
+  vessel_name?: string       // joined field from API
+  voyage_number?: string     // joined field from API
+  supporting_data?: Record<string, unknown>
   created_at: string
 }
+
+// ─── Dashboard / Analytics Types ─────────────────────────────────────────────
 
 export interface DashboardKPIs {
   total_distance_nm: number
@@ -150,6 +184,8 @@ export interface FuelData {
   insights: string[]
 }
 
+// ─── Route Optimization Types ─────────────────────────────────────────────────
+
 export interface RouteResult {
   id: string
   route_type: string
@@ -172,18 +208,26 @@ export interface Port {
   lon: number
 }
 
+// ─── Chat / Copilot Types ─────────────────────────────────────────────────────
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  conversation_id?: string
+  timestamp?: string         // some API responses use timestamp
+  created_at: string
+  recommendations?: string[]
+  warnings?: string[]
   metadata?: {
     recommendations?: string[]
     warnings?: string[]
     ai_used?: boolean
     model?: string
   }
-  created_at: string
 }
+
+// ─── Performance Types ────────────────────────────────────────────────────────
 
 export interface PerformanceMetrics {
   avg_speed: number

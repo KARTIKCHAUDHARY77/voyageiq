@@ -15,23 +15,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          charts: ['chart.js', 'react-chartjs-2'],
-          leaflet: ['leaflet', 'react-leaflet'],
-          framer: ['framer-motion'],
-        }
-      }
-    }
   },
   optimizeDeps: {
     include: ['leaflet', 'react-leaflet'],
   },
-  esbuild: {
-    logOverride: { 'this-is-undefined-in-esm': 'silent' }
-  }
 })
-
