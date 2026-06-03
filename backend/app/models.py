@@ -447,7 +447,7 @@ class CopilotMessage(db.Model):
     conversation_id = db.Column(db.String(36), db.ForeignKey('copilot_conversations.id'), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    metadata = db.Column(db.JSON)
+    msg_metadata = db.Column(db.JSON)  # renamed from 'metadata' (reserved by SQLAlchemy)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -455,7 +455,7 @@ class CopilotMessage(db.Model):
             'id': self.id,
             'role': self.role,
             'content': self.content,
-            'metadata': self.metadata,
+            'metadata': self.msg_metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

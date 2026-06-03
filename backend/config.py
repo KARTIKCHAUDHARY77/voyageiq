@@ -13,17 +13,17 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'voyageiq-secret-key-2024-maritime')
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL',
-        'postgresql://voyageiq:voyageiq123@localhost:5432/voyageiq_db'
-    )
+    # Use SQLite locally (no install needed), PostgreSQL in production via DATABASE_URL
+    _db_url = os.environ.get('DATABASE_URL', '')
+    if _db_url.startswith('postgres://'):
+        _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = _db_url if _db_url else \
+        f"sqlite:///{os.path.join(os.path.dirname(__file__), 'voyageiq_local.db')}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_timeout': 30,
-        'pool_recycle': 3600,
-        'max_overflow': 20
+        'pool_pre_ping': True,
     }
+
     
     # JWT
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'voyageiq-jwt-secret-2024')
