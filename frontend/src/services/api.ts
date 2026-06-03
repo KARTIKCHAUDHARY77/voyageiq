@@ -68,9 +68,10 @@ export const claimsAPI = {
 }
 
 export const optimizationAPI = {
+  calculate:     (data: object) => api.post('/api/optimization/calculate', data),
   generateRoute: (data: object) => api.post('/api/optimization/route', data),
   fuelSimulator: (data: object) => api.post('/api/optimization/fuel-simulator', data),
-  getPorts: () => api.get('/api/optimization/ports'),
+  getPorts:      ()             => api.get('/api/optimization/ports'),
 }
 
 export const weatherAPI = {

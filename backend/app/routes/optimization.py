@@ -4,13 +4,13 @@ Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 Unauthorized copying or use of this file is strictly prohibited.
 Contact: 2512520007@geu.ac.in
 """
-
 """
-VoyageIQ AI - Route Optimization Blueprint
-Handles route generation, fuel simulation, and port listings.
+VoyageIQ AI - Voyage Calculation Engine
+Computes voyage performance: ETA, fuel, speed, weather-adjusted output.
+Uses 0.25-degree weather grid sampling along route.
 """
 import math
-import random
+import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -21,472 +21,572 @@ from app.models import Route, Vessel, Voyage
 optimization_bp = Blueprint('optimization', __name__)
 
 # ---------------------------------------------------------------------------
-# World Port Database  (44 major ports)
+# World Port Database (44 major ports)
 # ---------------------------------------------------------------------------
 WORLD_PORTS = {
-    # Asia Pacific
-    "Singapore": {"lat": 1.2897, "lon": 103.8501, "region": "Asia Pacific", "country": "Singapore"},
-    "Shanghai": {"lat": 31.2304, "lon": 121.4737, "region": "Asia Pacific", "country": "China"},
-    "Busan": {"lat": 35.0996, "lon": 129.0403, "region": "Asia Pacific", "country": "South Korea"},
-    "Hong Kong": {"lat": 22.2793, "lon": 114.1628, "region": "Asia Pacific", "country": "China"},
-    "Tokyo Bay (Tokyo)": {"lat": 35.6295, "lon": 139.7711, "region": "Asia Pacific", "country": "Japan"},
-    "Yokohama": {"lat": 35.4437, "lon": 139.6380, "region": "Asia Pacific", "country": "Japan"},
-    "Kaohsiung": {"lat": 22.6237, "lon": 120.3014, "region": "Asia Pacific", "country": "Taiwan"},
-    "Port Klang": {"lat": 2.9937, "lon": 101.3765, "region": "Asia Pacific", "country": "Malaysia"},
-    "Tanjung Pelepas": {"lat": 1.3644, "lon": 103.5530, "region": "Asia Pacific", "country": "Malaysia"},
-    "Guangzhou (Nansha)": {"lat": 22.7784, "lon": 113.5671, "region": "Asia Pacific", "country": "China"},
-    "Tianjin": {"lat": 38.9906, "lon": 117.7229, "region": "Asia Pacific", "country": "China"},
-    "Qingdao": {"lat": 36.0671, "lon": 120.3826, "region": "Asia Pacific", "country": "China"},
-    "Ningbo-Zhoushan": {"lat": 29.8683, "lon": 121.5440, "region": "Asia Pacific", "country": "China"},
-    "Jakarta (Tanjung Priok)": {"lat": -6.1087, "lon": 106.8801, "region": "Asia Pacific", "country": "Indonesia"},
-    "Manila": {"lat": 14.5794, "lon": 120.9645, "region": "Asia Pacific", "country": "Philippines"},
-    "Bangkok (Laem Chabang)": {"lat": 13.0825, "lon": 100.8823, "region": "Asia Pacific", "country": "Thailand"},
-    "Ho Chi Minh City": {"lat": 10.7769, "lon": 106.7009, "region": "Asia Pacific", "country": "Vietnam"},
-    "Sydney": {"lat": -33.8523, "lon": 151.2108, "region": "Asia Pacific", "country": "Australia"},
-    "Melbourne": {"lat": -37.8418, "lon": 144.9286, "region": "Asia Pacific", "country": "Australia"},
-    # South Asia / Middle East
-    "Mumbai": {"lat": 18.9322, "lon": 72.8374, "region": "South Asia", "country": "India"},
-    "Jawaharlal Nehru (JNPT)": {"lat": 18.9440, "lon": 72.9428, "region": "South Asia", "country": "India"},
-    "Colombo": {"lat": 6.9271, "lon": 79.8612, "region": "South Asia", "country": "Sri Lanka"},
-    "Dubai (Jebel Ali)": {"lat": 24.9857, "lon": 55.0648, "region": "Middle East", "country": "UAE"},
-    "Abu Dhabi": {"lat": 24.4667, "lon": 54.3667, "region": "Middle East", "country": "UAE"},
-    "Oman (Sohar)": {"lat": 24.3586, "lon": 56.6267, "region": "Middle East", "country": "Oman"},
-    "Saudi Arabia (Dammam)": {"lat": 26.4207, "lon": 50.1033, "region": "Middle East", "country": "Saudi Arabia"},
-    # Africa
-    "Durban": {"lat": -29.8587, "lon": 31.0218, "region": "Africa", "country": "South Africa"},
-    "Cape Town": {"lat": -33.9249, "lon": 18.4241, "region": "Africa", "country": "South Africa"},
-    "Mombasa": {"lat": -4.0435, "lon": 39.6682, "region": "Africa", "country": "Kenya"},
-    "Dar es Salaam": {"lat": -6.7924, "lon": 39.2083, "region": "Africa", "country": "Tanzania"},
-    "Lagos (Apapa)": {"lat": 6.4530, "lon": 3.3841, "region": "Africa", "country": "Nigeria"},
-    # Europe
-    "Rotterdam": {"lat": 51.9244, "lon": 4.4777, "region": "Europe", "country": "Netherlands"},
-    "Antwerp": {"lat": 51.2194, "lon": 4.4025, "region": "Europe", "country": "Belgium"},
-    "Hamburg": {"lat": 53.5488, "lon": 9.9872, "region": "Europe", "country": "Germany"},
-    "Felixstowe": {"lat": 51.9603, "lon": 1.3513, "region": "Europe", "country": "UK"},
-    "Bremerhaven": {"lat": 53.5386, "lon": 8.5802, "region": "Europe", "country": "Germany"},
-    "Barcelona": {"lat": 41.3515, "lon": 2.1734, "region": "Europe", "country": "Spain"},
-    "Piraeus": {"lat": 37.9480, "lon": 23.6441, "region": "Europe", "country": "Greece"},
-    "Genoa": {"lat": 44.4056, "lon": 8.9463, "region": "Europe", "country": "Italy"},
-    # Americas
-    "Los Angeles": {"lat": 33.7322, "lon": -118.2595, "region": "North America", "country": "USA"},
-    "Long Beach": {"lat": 33.7548, "lon": -118.2164, "region": "North America", "country": "USA"},
-    "New York/New Jersey": {"lat": 40.6892, "lon": -74.0445, "region": "North America", "country": "USA"},
-    "Houston (Barbours Cut)": {"lat": 29.7604, "lon": -94.9747, "region": "North America", "country": "USA"},
-    "Vancouver": {"lat": 49.2827, "lon": -123.1207, "region": "North America", "country": "Canada"},
-    "Santos": {"lat": -23.9535, "lon": -46.3333, "region": "South America", "country": "Brazil"},
-    "Colon (Panama)": {"lat": 9.3548, "lon": -79.9002, "region": "Central America", "country": "Panama"},
-    "Cartagena": {"lat": 10.3910, "lon": -75.4794, "region": "South America", "country": "Colombia"},
+    "Singapore":            {"lat": 1.2897,   "lon": 103.8501, "region": "Asia Pacific",   "country": "Singapore"},
+    "Shanghai":             {"lat": 31.2304,  "lon": 121.4737, "region": "Asia Pacific",   "country": "China"},
+    "Busan":                {"lat": 35.0996,  "lon": 129.0403, "region": "Asia Pacific",   "country": "South Korea"},
+    "Hong Kong":            {"lat": 22.2793,  "lon": 114.1628, "region": "Asia Pacific",   "country": "China"},
+    "Tokyo Bay":            {"lat": 35.6295,  "lon": 139.7711, "region": "Asia Pacific",   "country": "Japan"},
+    "Port Klang":           {"lat": 2.9937,   "lon": 101.3765, "region": "Asia Pacific",   "country": "Malaysia"},
+    "Jakarta":              {"lat": -6.1087,  "lon": 106.8801, "region": "Asia Pacific",   "country": "Indonesia"},
+    "Manila":               {"lat": 14.5794,  "lon": 120.9645, "region": "Asia Pacific",   "country": "Philippines"},
+    "Sydney":               {"lat": -33.8523, "lon": 151.2108, "region": "Asia Pacific",   "country": "Australia"},
+    "Melbourne":            {"lat": -37.8418, "lon": 144.9286, "region": "Asia Pacific",   "country": "Australia"},
+    "Mumbai":               {"lat": 18.9322,  "lon": 72.8374,  "region": "South Asia",     "country": "India"},
+    "Colombo":              {"lat": 6.9271,   "lon": 79.8612,  "region": "South Asia",     "country": "Sri Lanka"},
+    "Chittagong":           {"lat": 22.3569,  "lon": 91.8235,  "region": "South Asia",     "country": "Bangladesh"},
+    "Dubai (Jebel Ali)":    {"lat": 24.9857,  "lon": 55.0648,  "region": "Middle East",    "country": "UAE"},
+    "Ras Tanura":           {"lat": 26.6467,  "lon": 50.1600,  "region": "Middle East",    "country": "Saudi Arabia"},
+    "Fujairah":             {"lat": 25.1288,  "lon": 56.3264,  "region": "Middle East",    "country": "UAE"},
+    "Durban":               {"lat": -29.8587, "lon": 31.0218,  "region": "Africa",         "country": "South Africa"},
+    "Cape Town":            {"lat": -33.9249, "lon": 18.4241,  "region": "Africa",         "country": "South Africa"},
+    "Mombasa":              {"lat": -4.0435,  "lon": 39.6682,  "region": "Africa",         "country": "Kenya"},
+    "Lagos":                {"lat": 6.4530,   "lon": 3.3841,   "region": "Africa",         "country": "Nigeria"},
+    "Rotterdam":            {"lat": 51.9244,  "lon": 4.4777,   "region": "Europe",         "country": "Netherlands"},
+    "Antwerp":              {"lat": 51.2194,  "lon": 4.4025,   "region": "Europe",         "country": "Belgium"},
+    "Hamburg":              {"lat": 53.5488,  "lon": 9.9872,   "region": "Europe",         "country": "Germany"},
+    "Felixstowe":           {"lat": 51.9603,  "lon": 1.3513,   "region": "Europe",         "country": "UK"},
+    "Barcelona":            {"lat": 41.3515,  "lon": 2.1734,   "region": "Europe",         "country": "Spain"},
+    "Piraeus":              {"lat": 37.9480,  "lon": 23.6441,  "region": "Europe",         "country": "Greece"},
+    "Genoa":                {"lat": 44.4056,  "lon": 8.9463,   "region": "Europe",         "country": "Italy"},
+    "Los Angeles":          {"lat": 33.7322,  "lon": -118.2595,"region": "North America",  "country": "USA"},
+    "New York":             {"lat": 40.6892,  "lon": -74.0445, "region": "North America",  "country": "USA"},
+    "Houston":              {"lat": 29.7604,  "lon": -94.9747, "region": "North America",  "country": "USA"},
+    "Vancouver":            {"lat": 49.2827,  "lon": -123.1207,"region": "North America",  "country": "Canada"},
+    "Santos":               {"lat": -23.9535, "lon": -46.3333, "region": "South America",  "country": "Brazil"},
+    "Colon (Panama)":       {"lat": 9.3548,   "lon": -79.9002, "region": "Central America","country": "Panama"},
+    "Tianjin":              {"lat": 38.9906,  "lon": 117.7229, "region": "Asia Pacific",   "country": "China"},
+    "Qingdao":              {"lat": 36.0671,  "lon": 120.3826, "region": "Asia Pacific",   "country": "China"},
+    "Ningbo":               {"lat": 29.8683,  "lon": 121.5440, "region": "Asia Pacific",   "country": "China"},
+    "Kaohsiung":            {"lat": 22.6237,  "lon": 120.3014, "region": "Asia Pacific",   "country": "Taiwan"},
+    "Laem Chabang":         {"lat": 13.0825,  "lon": 100.8823, "region": "Asia Pacific",   "country": "Thailand"},
+    "Aden":                 {"lat": 12.7797,  "lon": 45.0367,  "region": "Middle East",    "country": "Yemen"},
+    "Suez":                 {"lat": 29.9668,  "lon": 32.5498,  "region": "Middle East",    "country": "Egypt"},
+    "Alexandria":           {"lat": 31.2001,  "lon": 29.9187,  "region": "Middle East",    "country": "Egypt"},
+    "Karachi":              {"lat": 24.8607,  "lon": 67.0011,  "region": "South Asia",     "country": "Pakistan"},
+    "Dar es Salaam":        {"lat": -6.7924,  "lon": 39.2083,  "region": "Africa",         "country": "Tanzania"},
+    "Abidjan":              {"lat": 5.3600,   "lon": -4.0083,  "region": "Africa",         "country": "Ivory Coast"},
 }
 
 # ---------------------------------------------------------------------------
-# Vessel fuel constants  (k-factor per vessel type)
+# Haversine distance
 # ---------------------------------------------------------------------------
-VESSEL_FUEL_CONSTANTS = {
-    "container":     {"k": 0.00028, "base_consumption_mt_day": 85,  "fuel_price_usd": 650},
-    "bulk carrier":  {"k": 0.00018, "base_consumption_mt_day": 45,  "fuel_price_usd": 620},
-    "tanker":        {"k": 0.00022, "base_consumption_mt_day": 60,  "fuel_price_usd": 630},
-    "vlcc":          {"k": 0.00032, "base_consumption_mt_day": 110, "fuel_price_usd": 620},
-    "lng carrier":   {"k": 0.00020, "base_consumption_mt_day": 140, "fuel_price_usd": 900},
-    "roro":          {"k": 0.00015, "base_consumption_mt_day": 50,  "fuel_price_usd": 650},
-    "general cargo": {"k": 0.00012, "base_consumption_mt_day": 30,  "fuel_price_usd": 640},
-    "default":       {"k": 0.00020, "base_consumption_mt_day": 55,  "fuel_price_usd": 640},
-}
-
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
-
-def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Return great-circle distance in nautical miles between two coordinates."""
-    R_NM = 3440.065  # Earth radius in nautical miles
+def _haversine(lat1, lon1, lat2, lon2):
+    R = 3440.065  # Earth radius in nautical miles
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * R_NM * math.asin(math.sqrt(a))
+    d_phi = math.radians(lat2 - lat1)
+    d_lam = math.radians(lon2 - lon1)
+    a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lam/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
 
-
-def _intermediate_point(lat1, lon1, lat2, lon2, fraction):
-    """Return (lat, lon) at a given fraction along the great-circle between two points."""
-    phi1, lam1 = math.radians(lat1), math.radians(lon1)
-    phi2, lam2 = math.radians(lat2), math.radians(lon2)
-    dphi = phi2 - phi1
-    dlam = lam2 - lam1
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    d = 2 * math.asin(math.sqrt(a))
-    if d < 1e-10:
-        return lat1, lon1
-    A = math.sin((1 - fraction) * d) / math.sin(d)
-    B = math.sin(fraction * d) / math.sin(d)
-    x = A * math.cos(phi1) * math.cos(lam1) + B * math.cos(phi2) * math.cos(lam2)
-    y = A * math.cos(phi1) * math.sin(lam1) + B * math.cos(phi2) * math.sin(lam2)
-    z = A * math.sin(phi1) + B * math.sin(phi2)
-    phi_i = math.atan2(z, math.sqrt(x ** 2 + y ** 2))
-    lam_i = math.atan2(y, x)
-    return math.degrees(phi_i), math.degrees(lam_i)
-
-
-def _build_waypoints(origin_lat, origin_lon, dest_lat, dest_lon, distance_nm, offset_factor=0.0):
+# ---------------------------------------------------------------------------
+# 0.25° Weather Grid Sampling along route
+# ---------------------------------------------------------------------------
+def _sample_weather_025deg(lat1, lon1, lat2, lon2, n_points=8):
     """
-    Generate a list of waypoint dicts along (or slightly offset from) the great-circle route.
-    Adds intermediate waypoints for routes longer than 1 000 nm.
-    offset_factor shifts the mid-point perpendicular to the route for route variants.
+    Sample weather data along route at 0.25° grid resolution.
+    Returns list of weather observations at equally-spaced route points.
     """
-    waypoints = [{"lat": round(origin_lat, 4), "lon": round(origin_lon, 4)}]
+    OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+    MARINE_API = "https://marine-api.open-meteo.com/v1/marine"
+    samples = []
 
-    num_intermediates = max(1, int(distance_nm // 1000))  # one per ~1 000 nm
-    num_intermediates = min(num_intermediates, 6)           # cap at 6
+    for i in range(n_points):
+        frac = i / max(n_points - 1, 1)
+        # Snap to nearest 0.25° grid point
+        raw_lat = lat1 + frac * (lat2 - lat1)
+        raw_lon = lon1 + frac * (lon2 - lon1)
+        lat = round(raw_lat * 4) / 4   # snap to 0.25°
+        lon = round(raw_lon * 4) / 4
 
-    for i in range(1, num_intermediates + 1):
-        frac = i / (num_intermediates + 1)
-        lat_i, lon_i = _intermediate_point(origin_lat, origin_lon, dest_lat, dest_lon, frac)
-        # Apply perpendicular offset for route variants
-        if offset_factor != 0:
-            perp_lat = lat_i + offset_factor * math.cos(math.radians(lon_i))
-            perp_lon = lon_i + offset_factor * math.sin(math.radians(lat_i))
-            lat_i = max(-89.0, min(89.0, perp_lat))
-            lon_i = max(-179.9, min(179.9, perp_lon))
-        waypoints.append({"lat": round(lat_i, 4), "lon": round(lon_i, 4)})
+        obs = {"lat": lat, "lon": lon, "frac": round(frac, 2)}
+        try:
+            # Atmospheric weather
+            atm = requests.get(OPEN_METEO, params={
+                "latitude": lat, "longitude": lon,
+                "current": "wind_speed_10m,wind_direction_10m,precipitation,weather_code",
+                "wind_speed_unit": "kn",
+            }, timeout=5).json()
+            curr = atm.get("current", {})
+            obs["wind_speed_kn"] = round(curr.get("wind_speed_10m", 10), 1)
+            obs["wind_dir"]      = round(curr.get("wind_direction_10m", 0))
+            obs["precip"]        = curr.get("precipitation", 0)
+        except Exception:
+            obs["wind_speed_kn"] = 12.0
+            obs["wind_dir"]      = 225
+            obs["precip"]        = 0
 
-    waypoints.append({"lat": round(dest_lat, 4), "lon": round(dest_lon, 4)})
-    return waypoints
+        try:
+            # Marine weather
+            mar = requests.get(MARINE_API, params={
+                "latitude": lat, "longitude": lon,
+                "current": "wave_height,swell_wave_height,ocean_current_velocity,ocean_current_direction",
+            }, timeout=5).json()
+            curr_m = mar.get("current", {})
+            obs["wave_height"]    = round(curr_m.get("wave_height", 1.0), 2)
+            obs["swell_height"]   = round(curr_m.get("swell_wave_height", 0.8), 2)
+            obs["current_speed"]  = round(curr_m.get("ocean_current_velocity", 0.3), 2)
+            obs["current_dir"]    = round(curr_m.get("ocean_current_direction", 180))
+        except Exception:
+            obs["wave_height"]   = 1.2
+            obs["swell_height"]  = 0.8
+            obs["current_speed"] = 0.3
+            obs["current_dir"]   = 180
 
+        # Beaufort scale
+        ws = obs["wind_speed_kn"]
+        if ws < 1: obs["beaufort"] = 0
+        elif ws < 4: obs["beaufort"] = 1
+        elif ws < 7: obs["beaufort"] = 2
+        elif ws < 11: obs["beaufort"] = 3
+        elif ws < 17: obs["beaufort"] = 4
+        elif ws < 22: obs["beaufort"] = 5
+        elif ws < 28: obs["beaufort"] = 6
+        elif ws < 34: obs["beaufort"] = 7
+        elif ws < 41: obs["beaufort"] = 8
+        else: obs["beaufort"] = 9
 
-def _fuel_consumption(speed_knots, distance_nm, vessel_type):
+        samples.append(obs)
+
+    return samples
+
+# ---------------------------------------------------------------------------
+# Vessel type fuel coefficients
+# ---------------------------------------------------------------------------
+VESSEL_COEFFICIENTS = {
+    "Bulk Carrier":        {"k": 0.0022, "base_cons": 28.5,  "design_speed": 14.0, "lwt_factor": 0.40},
+    "VLCC Tanker":         {"k": 0.0035, "base_cons": 78.0,  "design_speed": 15.5, "lwt_factor": 0.45},
+    "Suezmax Tanker":      {"k": 0.0028, "base_cons": 52.0,  "design_speed": 15.0, "lwt_factor": 0.44},
+    "Aframax Tanker":      {"k": 0.0024, "base_cons": 38.0,  "design_speed": 14.8, "lwt_factor": 0.43},
+    "Container (Large)":   {"k": 0.0045, "base_cons": 185.0, "design_speed": 22.0, "lwt_factor": 0.38},
+    "Container (Medium)":  {"k": 0.0038, "base_cons": 95.0,  "design_speed": 20.0, "lwt_factor": 0.38},
+    "Container (Feeder)":  {"k": 0.0028, "base_cons": 32.0,  "design_speed": 18.0, "lwt_factor": 0.38},
+    "Chemical Tanker":     {"k": 0.0020, "base_cons": 22.0,  "design_speed": 14.0, "lwt_factor": 0.42},
+    "LNG Carrier":         {"k": 0.0030, "base_cons": 120.0, "design_speed": 19.5, "lwt_factor": 0.40},
+    "LPG Carrier":         {"k": 0.0025, "base_cons": 45.0,  "design_speed": 17.0, "lwt_factor": 0.40},
+    "General Cargo":       {"k": 0.0018, "base_cons": 18.0,  "design_speed": 13.0, "lwt_factor": 0.42},
+    "RoRo":                {"k": 0.0032, "base_cons": 55.0,  "design_speed": 20.0, "lwt_factor": 0.35},
+}
+
+# ---------------------------------------------------------------------------
+# Main Voyage Calculator
+# ---------------------------------------------------------------------------
+def _calculate_voyage(data, weather_samples):
     """
-    Estimate fuel consumption (MT) using the cubic admiralty formula.
-    consumption = k * speed^3 * (distance / speed) = k * speed^2 * distance
+    Full physics-based voyage calculation with weather integration.
+    Returns detailed performance breakdown.
     """
-    vt = vessel_type.lower() if vessel_type else "default"
-    params = VESSEL_FUEL_CONSTANTS.get(vt, VESSEL_FUEL_CONSTANTS["default"])
-    k = params["k"]
-    return k * (speed_knots ** 2) * distance_nm
+    vessel_type   = data.get("vessel_type", "Bulk Carrier")
+    dwt           = float(data.get("dwt", 75000))
+    draft         = float(data.get("draft", 13.5))
+    cargo_weight  = float(data.get("cargo_weight", 0))
+    target_speed  = float(data.get("target_speed", 14.0))
+    distance_nm   = float(data.get("distance_nm", 1000))
+    fuel_price    = float(data.get("fuel_price_usd", 580))
+    fuel_type     = data.get("fuel_type", "VLSFO")
 
+    # Manual weather override (if user provided)
+    manual_wind_speed  = data.get("wind_speed_kn")
+    manual_wave_height = data.get("wave_height_m")
+    manual_current_spd = data.get("current_speed_kn", 0.0)
+    manual_current_dir = data.get("current_direction", "Following")
 
-def _build_weather_risk_zones(origin_lat, origin_lon, dest_lat, dest_lon):
-    """Generate illustrative weather risk zones along a route."""
-    zones = []
-    risk_configs = [
-        {"severity": "low",    "color": "#22c55e", "radius_nm": 80},
-        {"severity": "medium", "color": "#f59e0b", "radius_nm": 100},
-        {"severity": "high",   "color": "#ef4444", "radius_nm": 60},
-    ]
-    for i, cfg in enumerate(risk_configs):
-        frac = 0.25 + i * 0.25
-        lat_z, lon_z = _intermediate_point(origin_lat, origin_lon, dest_lat, dest_lon, frac)
-        # slight random shift so zones don't all fall on the route centreline
-        lat_z += random.uniform(-1.5, 1.5)
-        lon_z += random.uniform(-2.0, 2.0)
-        zones.append({
-            "center": {"lat": round(lat_z, 4), "lon": round(lon_z, 4)},
-            "radius_nm": cfg["radius_nm"],
-            "severity": cfg["severity"],
-            "color": cfg["color"],
-            "description": f"{cfg['severity'].capitalize()} weather risk area",
+    coeff = VESSEL_COEFFICIENTS.get(vessel_type, VESSEL_COEFFICIENTS["Bulk Carrier"])
+
+    # ---- Displacement / loading factor ----
+    loading_ratio  = cargo_weight / max(dwt, 1)
+    loading_factor = 0.85 + 0.20 * loading_ratio  # 0.85 (ballast) → 1.05 (full load)
+
+    # ---- Average weather from 0.25° samples ----
+    if weather_samples:
+        avg_wind  = sum(s.get("wind_speed_kn", 10) for s in weather_samples) / len(weather_samples)
+        avg_wave  = sum(s.get("wave_height", 1.0) for s in weather_samples) / len(weather_samples)
+        avg_curr  = sum(s.get("current_speed", 0.3) for s in weather_samples) / len(weather_samples)
+        avg_bf    = sum(s.get("beaufort", 3) for s in weather_samples) / len(weather_samples)
+    else:
+        avg_wind, avg_wave, avg_curr, avg_bf = 10.0, 1.0, 0.3, 3.0
+
+    # Override with manual values if provided
+    if manual_wind_speed is not None:
+        avg_wind = float(manual_wind_speed)
+    if manual_wave_height is not None:
+        avg_wave = float(manual_wave_height)
+    if manual_current_spd is not None:
+        avg_curr = float(manual_current_spd)
+
+    # Beaufort from manual wind
+    ws = avg_wind
+    if ws < 1: avg_bf = 0
+    elif ws < 7: avg_bf = 2
+    elif ws < 17: avg_bf = 4
+    elif ws < 28: avg_bf = 6
+    elif ws < 41: avg_bf = 8
+    else: avg_bf = 10
+
+    # ---- Weather resistance factor (speed reduction) ----
+    # Wind resistance: +0.8% per Beaufort above BF4
+    wind_penalty = max(0, (avg_bf - 4) * 0.008)
+    # Wave resistance: +2% per meter of wave above 1.5m
+    wave_penalty = max(0, (avg_wave - 1.5) * 0.02)
+    # Current effect on effective speed
+    if manual_current_dir in ("Following", "Stern"):
+        current_assist = avg_curr * 0.7  # following current helps
+        current_penalty = 0.0
+    elif manual_current_dir in ("Head", "Bow"):
+        current_assist = 0.0
+        current_penalty = avg_curr * 0.85  # head current hurts
+    else:  # Beam
+        current_assist = avg_curr * 0.2
+        current_penalty = avg_curr * 0.2
+
+    weather_factor = 1.0 - wind_penalty - wave_penalty
+    effective_speed = target_speed * weather_factor - current_penalty + current_assist
+    effective_speed = max(effective_speed, 4.0)  # min steerage speed
+
+    # ---- Fuel consumption (admiralty coefficient model) ----
+    # Base: proportional to speed^3 × displacement^(2/3)
+    displacement = dwt * loading_factor * 1.25  # rough tonne displacement
+    k = coeff["k"]
+    base_daily = k * (target_speed ** 3) * (displacement ** (2/3)) / 1000
+    # Weather overhead: each BF adds ~3% ME load
+    weather_overhead = 1.0 + max(0, avg_bf - 2) * 0.028
+    me_consumption = base_daily * weather_overhead * loading_factor
+    ae_consumption = me_consumption * 0.08   # AE = ~8% of ME
+    total_daily    = me_consumption + ae_consumption
+
+    # ---- Duration & totals ----
+    duration_hrs  = distance_nm / effective_speed
+    duration_days = duration_hrs / 24
+    total_fuel    = total_daily * duration_days
+    fuel_cost     = total_fuel * fuel_price
+    fuel_per_nm   = total_fuel / distance_nm if distance_nm > 0 else 0
+
+    # ---- Eco speed recommendation ----
+    # Cube law: reducing speed 10% → reduces consumption ~27%
+    eco_speed     = target_speed * 0.88
+    eco_daily     = total_daily * (0.88 ** 3)
+    eco_duration  = (distance_nm / eco_speed) / 24
+    eco_fuel      = eco_daily * eco_duration
+    eco_savings_fuel = total_fuel - eco_fuel
+    eco_savings_usd  = eco_savings_fuel * fuel_price
+    eco_time_penalty = (eco_duration - duration_days) * 24  # hours extra
+
+    # ---- CII / Carbon intensity ----
+    # CII (gCO2/capacity-mile) for 2024: target = 5.0 for bulk carrier
+    co2_factor = {"VLSFO": 3.114, "MGO": 3.206, "LSMGO": 3.212, "LNG": 2.75}.get(fuel_type, 3.114)
+    co2_total  = total_fuel * co2_factor
+    cii_attained = (co2_total * 1_000_000) / (dwt * distance_nm) if dwt and distance_nm else 0
+    cii_targets = {"A": 4.5, "B": 5.0, "C": 5.5, "D": 6.0}
+    cii_rating = "E"
+    for grade, threshold in cii_targets.items():
+        if cii_attained <= threshold:
+            cii_rating = grade
+            break
+
+    # ---- Performance Score ----
+    score = 100
+    if avg_bf > 5: score -= (avg_bf - 5) * 5
+    if loading_ratio > 0.95: score -= 5
+    if target_speed > coeff["design_speed"]: score -= 10
+    score = max(40, min(100, score))
+
+    return {
+        # Route
+        "distance_nm":       round(distance_nm, 1),
+        "effective_speed":   round(effective_speed, 2),
+        "duration_hrs":      round(duration_hrs, 1),
+        "duration_days":     round(duration_days, 2),
+        "eta_offset_hrs":    round(duration_hrs, 1),
+        # Fuel
+        "me_consumption_day": round(me_consumption, 2),
+        "ae_consumption_day": round(ae_consumption, 2),
+        "total_daily_fuel":  round(total_daily, 2),
+        "total_fuel_mt":     round(total_fuel, 1),
+        "fuel_per_nm":       round(fuel_per_nm, 4),
+        "fuel_cost_usd":     round(fuel_cost, 0),
+        "fuel_type":         fuel_type,
+        # Weather
+        "avg_wind_kn":       round(avg_wind, 1),
+        "avg_wave_m":        round(avg_wave, 2),
+        "avg_current_kn":    round(avg_curr, 2),
+        "beaufort_avg":      round(avg_bf, 1),
+        "weather_factor":    round(weather_factor, 4),
+        "weather_penalty_pct": round((1 - weather_factor) * 100, 1),
+        # Eco
+        "eco_speed":         round(eco_speed, 1),
+        "eco_fuel_mt":       round(eco_fuel, 1),
+        "eco_savings_fuel":  round(eco_savings_fuel, 1),
+        "eco_savings_usd":   round(eco_savings_usd, 0),
+        "eco_time_penalty_hrs": round(eco_time_penalty, 1),
+        # Carbon
+        "co2_total_mt":      round(co2_total, 1),
+        "cii_attained":      round(cii_attained, 3),
+        "cii_rating":        cii_rating,
+        # Score
+        "performance_score": score,
+        "loading_ratio":     round(loading_ratio * 100, 1),
+    }
+
+# ---------------------------------------------------------------------------
+# AI Suggestions Engine
+# ---------------------------------------------------------------------------
+def _generate_ai_suggestions(calc, data, weather_samples):
+    tips = []
+    bf = calc["beaufort_avg"]
+    speed = float(data.get("target_speed", 14))
+    vessel_type = data.get("vessel_type", "Bulk Carrier")
+    coeff = VESSEL_COEFFICIENTS.get(vessel_type, VESSEL_COEFFICIENTS["Bulk Carrier"])
+
+    # Speed optimization
+    if speed > coeff["design_speed"]:
+        tips.append({
+            "type": "warning",
+            "title": "Speed Exceeds Design Limit",
+            "detail": f"Running at {speed} kn above design speed {coeff['design_speed']} kn increases fuel by ~{round((speed/coeff['design_speed'])**3 * 100 - 100, 0):.0f}%. Reduce to design speed.",
+            "saving_usd": round(calc["eco_savings_usd"] * 1.2, 0),
         })
-    return zones
+    elif calc["eco_savings_usd"] > 5000:
+        tips.append({
+            "type": "opportunity",
+            "title": "Slow Steaming Opportunity",
+            "detail": f"Reducing speed to {calc['eco_speed']} kn saves {calc['eco_savings_fuel']} MT of fuel (${calc['eco_savings_usd']:,.0f}) at the cost of {calc['eco_time_penalty_hrs']:.1f} extra hours.",
+            "saving_usd": round(calc["eco_savings_usd"], 0),
+        })
 
+    # Weather routing
+    if bf >= 6:
+        tips.append({
+            "type": "warning",
+            "title": "Adverse Weather on Route",
+            "detail": f"Average Beaufort {bf:.1f} along route causing {calc['weather_penalty_pct']}% speed reduction. Consider alternative routing north/south of weather system.",
+            "saving_usd": round(calc["fuel_cost_usd"] * 0.05, 0),
+        })
+    elif bf >= 4:
+        tips.append({
+            "type": "info",
+            "title": "Moderate Weather Conditions",
+            "detail": f"Beaufort {bf:.1f} causing {calc['weather_penalty_pct']}% speed loss. Monitor GRIB data for next 48h window.",
+            "saving_usd": 0,
+        })
 
-def _get_vessel_params(vessel_type: str):
-    vt = (vessel_type or "").lower()
-    return VESSEL_FUEL_CONSTANTS.get(vt, VESSEL_FUEL_CONSTANTS["default"])
+    # CII
+    if calc["cii_rating"] in ("D", "E"):
+        tips.append({
+            "type": "critical",
+            "title": f"CII Rating: {calc['cii_rating']} — Regulatory Risk",
+            "detail": f"Attained CII {calc['cii_attained']:.3f} exceeds acceptable limits. Reduce speed or optimise trim to improve rating.",
+            "saving_usd": round(calc["eco_savings_usd"] * 0.5, 0),
+        })
+    elif calc["cii_rating"] == "A":
+        tips.append({
+            "type": "success",
+            "title": "Excellent CII Rating — Carbon Compliant",
+            "detail": f"CII {calc['cii_attained']:.3f} achieves Grade A. This voyage qualifies for green shipping incentives.",
+            "saving_usd": 0,
+        })
 
+    # Loading
+    if calc["loading_ratio"] < 30:
+        tips.append({
+            "type": "info",
+            "title": "Ballast Voyage — Trim Optimisation",
+            "detail": "Vessel in near-ballast condition. Optimise trim: 0.5–1.0m stern trim can reduce fuel by 1.5–2%. Consider ballasting to improve propulsion.",
+            "saving_usd": round(calc["total_fuel_mt"] * 580 * 0.02, 0),
+        })
+    elif calc["loading_ratio"] > 92:
+        tips.append({
+            "type": "warning",
+            "title": "Near Full Load — Monitor Squat Effect",
+            "detail": "High loading ratio may cause squat in shallow channels. Reduce speed to design draft limits near ports.",
+            "saving_usd": 0,
+        })
 
-def _beaufort_from_speed(wind_speed_kmh: float) -> int:
-    thresholds = [1, 5, 11, 19, 28, 38, 49, 61, 74]
-    for bf, thr in enumerate(thresholds):
-        if wind_speed_kmh <= thr:
-            return bf
-    return 9
+    # Current
+    if data.get("current_direction") in ("Head", "Bow"):
+        tips.append({
+            "type": "opportunity",
+            "title": "Head Current Detected — Route Deviation",
+            "detail": f"Head current of {calc['avg_current_kn']} kn opposing vessel. Deviating ±30nm may find favourable current, saving ~{round(calc['total_fuel_mt']*0.03*580,0):,.0f} USD.",
+            "saving_usd": round(calc["total_fuel_mt"] * 0.03 * 580, 0),
+        })
+
+    # RPM optimisation (generic)
+    tips.append({
+        "type": "info",
+        "title": "Engine RPM Optimisation",
+        "detail": "Ensure ME is operating at MCR 75–85% for optimal SFOC. Verify turbocharger efficiency and scavenge pressures at next noon report.",
+        "saving_usd": round(calc["total_fuel_mt"] * 0.015 * 580, 0),
+    })
+
+    return tips[:6]  # max 6 suggestions
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
+@optimization_bp.route('/calculate', methods=['POST'])
+@jwt_required()
+def calculate_voyage():
+    """
+    POST /api/optimization/calculate
+    Full voyage calculation with 0.25° weather grid sampling.
+    Input JSON:
+      origin_port, destination_port, vessel_type, dwt, draft,
+      cargo_weight, target_speed, fuel_type, fuel_price_usd,
+      wind_speed_kn (optional manual), wave_height_m (optional),
+      current_speed_kn, current_direction, departure_datetime
+    """
+    data = request.get_json() or {}
+
+    origin      = data.get("origin_port", "")
+    destination = data.get("destination_port", "")
+
+    # Resolve coordinates
+    orig_info = WORLD_PORTS.get(origin)
+    dest_info = WORLD_PORTS.get(destination)
+
+    if not orig_info or not dest_info:
+        return jsonify({"success": False, "error": f"Unknown port: {origin!r} or {destination!r}"}), 400
+
+    lat1, lon1 = orig_info["lat"], orig_info["lon"]
+    lat2, lon2 = dest_info["lat"], dest_info["lon"]
+
+    # Calculate great-circle distance
+    distance_nm = _haversine(lat1, lon1, lat2, lon2)
+    data["distance_nm"] = distance_nm
+
+    # 0.25° weather grid sampling along route
+    use_live_weather = data.get("use_live_weather", True)
+    weather_samples  = []
+    if use_live_weather:
+        try:
+            weather_samples = _sample_weather_025deg(lat1, lon1, lat2, lon2, n_points=8)
+        except Exception as e:
+            current_app.logger.warning(f"Weather sampling failed: {e}")
+
+    # Calculate voyage performance
+    calc = _calculate_voyage(data, weather_samples)
+
+    # AI Suggestions
+    suggestions = _generate_ai_suggestions(calc, data, weather_samples)
+
+    # ETA calculation
+    depart_str = data.get("departure_datetime", datetime.utcnow().isoformat())
+    try:
+        depart_dt = datetime.fromisoformat(depart_str.replace("Z", ""))
+    except Exception:
+        depart_dt = datetime.utcnow()
+    eta_dt = depart_dt + timedelta(hours=calc["duration_hrs"])
+
+    # Route waypoints (simplified great-circle)
+    waypoints = []
+    n_wp = 12
+    for i in range(n_wp + 1):
+        f = i / n_wp
+        waypoints.append({
+            "lat": round(lat1 + f * (lat2 - lat1), 4),
+            "lon": round(lon1 + f * (lon2 - lon1), 4),
+            "order": i,
+        })
+
+    return jsonify({
+        "success": True,
+        "origin": {"name": origin, **orig_info},
+        "destination": {"name": destination, **dest_info},
+        "distance_nm": round(distance_nm, 1),
+        "calculation": calc,
+        "suggestions": suggestions,
+        "weather_samples": weather_samples,
+        "waypoints": waypoints,
+        "eta": eta_dt.isoformat(),
+        "departure": depart_dt.isoformat(),
+        "weather_grid_resolution": "0.25°",
+        "weather_sample_points": len(weather_samples),
+    }), 200
+
+
 @optimization_bp.route('/route', methods=['POST'])
 @jwt_required()
-def generate_route():
-    """
-    POST /api/optimization/route
-    Generate 4 optimised route variants between two ports.
-    """
-    try:
-        user_id = get_jwt_identity()
-        data = request.get_json(force=True) or {}
+def generate_routes():
+    """POST /api/optimization/route - Generate 4 route options."""
+    data = request.get_json() or {}
+    origin      = data.get("origin_port", data.get("origin", ""))
+    destination = data.get("destination_port", data.get("destination", ""))
 
-        origin_name = data.get('origin_port', '').strip()
-        dest_name = data.get('destination_port', '').strip()
-        vessel_type = data.get('vessel_type', 'container')
-        speed_knots = float(data.get('speed_knots', 14.0))
-        vessel_id = data.get('vessel_id')
+    orig_info = WORLD_PORTS.get(origin)
+    dest_info = WORLD_PORTS.get(destination)
+    if not orig_info or not dest_info:
+        return jsonify({"success": False, "error": "Unknown port"}), 400
 
-        # Validate ports
-        if origin_name not in WORLD_PORTS:
-            return jsonify({
-                'success': False,
-                'error': f"Origin port '{origin_name}' not found. Use GET /api/optimization/ports for valid options."
-            }), 400
-        if dest_name not in WORLD_PORTS:
-            return jsonify({
-                'success': False,
-                'error': f"Destination port '{dest_name}' not found. Use GET /api/optimization/ports for valid options."
-            }), 400
-        if origin_name == dest_name:
-            return jsonify({'success': False, 'error': 'Origin and destination must be different ports.'}), 400
-        if not (1.0 <= speed_knots <= 30.0):
-            return jsonify({'success': False, 'error': 'speed_knots must be between 1 and 30.'}), 400
+    lat1, lon1 = orig_info["lat"], orig_info["lon"]
+    lat2, lon2 = dest_info["lat"], dest_info["lon"]
+    base_dist  = _haversine(lat1, lon1, lat2, lon2)
+    base_speed = float(data.get("speed_knots", 14.0))
+    fuel_price = float(data.get("fuel_price", 580))
+    k_fuel     = 0.0022
 
-        origin = WORLD_PORTS[origin_name]
-        dest = WORLD_PORTS[dest_name]
-        base_distance = _haversine_nm(origin['lat'], origin['lon'], dest['lat'], dest['lon'])
-        vessel_params = _get_vessel_params(vessel_type)
-        fuel_price = vessel_params['fuel_price_usd']
+    routes = []
+    configs = [
+        {"id": "optimal",  "label": "Optimal Route",  "dist_factor": 1.00, "speed_factor": 1.00, "risk": 2.5},
+        {"id": "fastest",  "label": "Fastest Route",  "dist_factor": 0.97, "speed_factor": 1.10, "risk": 4.0},
+        {"id": "eco",      "label": "Eco Route",      "dist_factor": 1.03, "speed_factor": 0.88, "risk": 1.5},
+        {"id": "safest",   "label": "Safest Route",   "dist_factor": 1.06, "speed_factor": 0.94, "risk": 0.8},
+    ]
+    for cfg in configs:
+        dist  = base_dist * cfg["dist_factor"]
+        spd   = base_speed * cfg["speed_factor"]
+        dur   = dist / spd
+        fuel  = k_fuel * (spd**3) * dur / 24
+        cost  = fuel * fuel_price
+        n_wp  = 10
+        wps   = [{"lat": round(lat1 + i/n_wp*(lat2-lat1), 4),
+                   "lon": round(lon1 + i/n_wp*(lon2-lon1), 4)}
+                 for i in range(n_wp+1)]
+        routes.append({
+            "id": cfg["id"], "label": cfg["label"],
+            "distance_nm": round(dist, 1),
+            "duration_hrs": round(dur, 1),
+            "speed_kn": round(spd, 1),
+            "fuel_mt": round(fuel, 1),
+            "cost_usd": round(cost, 0),
+            "risk_score": cfg["risk"],
+            "waypoints": wps,
+        })
 
-        weather_zones = _build_weather_risk_zones(origin['lat'], origin['lon'], dest['lat'], dest['lon'])
-
-        # ------------------------------------------------------------------ #
-        #  4 Route Variants
-        # ------------------------------------------------------------------ #
-        route_specs = [
-            {
-                "route_type":    "optimal",
-                "label":         "Optimal Route",
-                "description":   "Best balance of fuel efficiency, time, and safety.",
-                "speed_factor":  1.00,
-                "dist_factor":   1.00,
-                "offset":        0.0,
-                "risk_modifier": 1.0,
-                "color":         "#3b82f6",
-            },
-            {
-                "route_type":    "fastest",
-                "label":         "Fastest Route",
-                "description":   "Minimum transit time, higher fuel burn.",
-                "speed_factor":  1.20,
-                "dist_factor":   0.98,
-                "offset":        0.5,
-                "risk_modifier": 1.2,
-                "color":         "#f59e0b",
-            },
-            {
-                "route_type":    "eco",
-                "label":         "Eco Route",
-                "description":   "Minimum fuel burn via slow steaming.",
-                "speed_factor":  0.78,
-                "dist_factor":   1.03,
-                "offset":        -0.8,
-                "risk_modifier": 0.8,
-                "color":         "#22c55e",
-            },
-            {
-                "route_type":    "safest",
-                "label":         "Safest Route",
-                "description":   "Routes away from high-risk weather zones.",
-                "speed_factor":  0.90,
-                "dist_factor":   1.08,
-                "offset":        1.5,
-                "risk_modifier": 0.5,
-                "color":         "#a855f7",
-            },
-        ]
-
-        routes = []
-        saved_route_ids = []
-
-        for spec in route_specs:
-            eff_speed = round(speed_knots * spec['speed_factor'], 2)
-            eff_distance = round(base_distance * spec['dist_factor'], 1)
-            duration_hrs = round(eff_distance / eff_speed, 1) if eff_speed > 0 else 0
-            fuel_mt = round(_fuel_consumption(eff_speed, eff_distance, vessel_type), 2)
-            cost_usd = round(fuel_mt * fuel_price, 0)
-            risk_score = round(min(10.0, (random.uniform(2.5, 5.5) * spec['risk_modifier'])), 1)
-            waypoints = _build_waypoints(
-                origin['lat'], origin['lon'],
-                dest['lat'], dest['lon'],
-                eff_distance,
-                offset_factor=spec['offset'],
-            )
-
-            route_obj = {
-                "route_type":    spec['route_type'],
-                "label":         spec['label'],
-                "description":   spec['description'],
-                "color":         spec['color'],
-                "waypoints":     waypoints,
-                "distance_nm":   eff_distance,
-                "duration_hrs":  duration_hrs,
-                "fuel_mt":       fuel_mt,
-                "cost_usd":      int(cost_usd),
-                "risk_score":    risk_score,
-                "speed_knots":   eff_speed,
-            }
-            routes.append(route_obj)
-
-            # Persist to DB
-            try:
-                db_route = Route(
-                    origin_port=origin_name,
-                    destination_port=dest_name,
-                    route_type=spec['route_type'],
-                    waypoints=waypoints,
-                    total_distance_nm=eff_distance,
-                    estimated_duration_hrs=duration_hrs,
-                    estimated_fuel_mt=fuel_mt,
-                    estimated_cost_usd=int(cost_usd),
-                    weather_risk_score=risk_score,
-                    risk_zones=weather_zones,
-                    created_by=user_id,
-                )
-                db.session.add(db_route)
-                db.session.flush()
-                saved_route_ids.append(db_route.id)
-            except Exception:
-                pass  # Non-fatal — continue even if DB save fails
-
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'routes': routes,
-            'route_ids': saved_route_ids,
-            'origin': {
-                'name': origin_name,
-                'lat': origin['lat'],
-                'lon': origin['lon'],
-                'country': origin['country'],
-            },
-            'destination': {
-                'name': dest_name,
-                'lat': dest['lat'],
-                'lon': dest['lon'],
-                'country': dest['country'],
-            },
-            'weather_risk_zones': weather_zones,
-            'base_distance_nm': round(base_distance, 1),
-            'vessel_type': vessel_type,
-            'generated_at': datetime.utcnow().isoformat(),
-        }), 200
-
-    except ValueError as exc:
-        return jsonify({'success': False, 'error': f'Invalid numeric value: {exc}'}), 400
-    except Exception as exc:
-        current_app.logger.error(f'Route generation error: {exc}', exc_info=True)
-        db.session.rollback()
-        return jsonify({'success': False, 'error': 'Internal server error during route generation.'}), 500
+    return jsonify({"success": True, "routes": routes,
+                    "origin": orig_info, "destination": dest_info,
+                    "base_distance_nm": round(base_dist, 1)}), 200
 
 
 @optimization_bp.route('/fuel-simulator', methods=['POST'])
 @jwt_required()
 def fuel_simulator():
-    """
-    POST /api/optimization/fuel-simulator
-    Simulate fuel consumption for given speed, distance, vessel type, and weather.
-    """
-    try:
-        data = request.get_json(force=True) or {}
-
-        speed_knots = float(data.get('speed_knots', 14.0))
-        distance_nm = float(data.get('distance_nm', 1000.0))
-        vessel_type = data.get('vessel_type', 'container')
-        weather_condition = data.get('weather_condition', 'calm')  # calm | moderate | rough | storm
-
-        if not (1.0 <= speed_knots <= 30.0):
-            return jsonify({'success': False, 'error': 'speed_knots must be between 1 and 30.'}), 400
-        if distance_nm <= 0:
-            return jsonify({'success': False, 'error': 'distance_nm must be positive.'}), 400
-
-        vessel_params = _get_vessel_params(vessel_type)
-        fuel_price = vessel_params['fuel_price_usd']
-
-        # Weather multiplier on fuel
-        weather_multipliers = {"calm": 1.00, "moderate": 1.12, "rough": 1.28, "storm": 1.55}
-        weather_mult = weather_multipliers.get(weather_condition.lower(), 1.0)
-
-        # Baseline: same distance at 14 knots calm
-        baseline_speed = 14.0
-        baseline_fuel = _fuel_consumption(baseline_speed, distance_nm, vessel_type)
-
-        # Simulated fuel
-        raw_fuel = _fuel_consumption(speed_knots, distance_nm, vessel_type)
-        fuel_mt = round(raw_fuel * weather_mult, 2)
-        cost_usd = round(fuel_mt * fuel_price, 0)
-        duration_hrs = round(distance_nm / speed_knots, 2) if speed_knots > 0 else 0
-        eta_dt = (datetime.utcnow() + timedelta(hours=duration_hrs)).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-        savings_vs_baseline = round(baseline_fuel - fuel_mt, 2)
-        savings_pct = round((savings_vs_baseline / baseline_fuel) * 100, 1) if baseline_fuel > 0 else 0.0
-
-        # Speed comparison table
-        comparison = []
-        for s in [10, 12, 14, 16, 18, 20]:
-            f = round(_fuel_consumption(s, distance_nm, vessel_type) * weather_mult, 2)
-            comparison.append({
-                "speed_knots": s,
-                "fuel_mt": f,
-                "cost_usd": int(f * fuel_price),
-                "duration_hrs": round(distance_nm / s, 1),
-            })
-
-        return jsonify({
-            'success': True,
-            'fuel_mt': fuel_mt,
-            'duration_hrs': duration_hrs,
-            'cost_usd': int(cost_usd),
-            'eta_datetime': eta_dt,
-            'savings_vs_baseline': savings_vs_baseline,
-            'savings_pct': savings_pct,
-            'weather_condition': weather_condition,
-            'weather_fuel_multiplier': weather_mult,
-            'baseline_fuel_mt': round(baseline_fuel, 2),
-            'fuel_price_usd_per_mt': fuel_price,
-            'speed_comparison': comparison,
-            'vessel_type': vessel_type,
-        }), 200
-
-    except ValueError as exc:
-        return jsonify({'success': False, 'error': f'Invalid numeric value: {exc}'}), 400
-    except Exception as exc:
-        current_app.logger.error(f'Fuel simulator error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': 'Internal server error during fuel simulation.'}), 500
+    data = request.get_json() or {}
+    speed    = float(data.get("speed_knots", 14))
+    dist     = float(data.get("distance_nm", 1000))
+    vtype    = data.get("vessel_type", "Bulk Carrier")
+    price    = float(data.get("fuel_price", 580))
+    coeff    = VESSEL_COEFFICIENTS.get(vtype, VESSEL_COEFFICIENTS["Bulk Carrier"])
+    k        = coeff["k"]
+    dwt      = float(data.get("dwt", 75000))
+    duration = dist / speed
+    fuel     = k * (speed**3) * (dwt**0.667) / 1000 * (duration/24)
+    base_fuel = k * (14**3) * (dwt**0.667) / 1000 * ((dist/14)/24)
+    return jsonify({
+        "speed_kn": speed, "distance_nm": dist,
+        "duration_hrs": round(duration, 1),
+        "fuel_mt": round(fuel, 1),
+        "cost_usd": round(fuel * price, 0),
+        "savings_vs_baseline": round(base_fuel - fuel, 1),
+        "eta": (datetime.utcnow() + timedelta(hours=duration)).isoformat(),
+    })
 
 
 @optimization_bp.route('/ports', methods=['GET'])
 @jwt_required()
 def get_ports():
-    """
-    GET /api/optimization/ports
-    Return the full list of world ports with coordinates.
-    """
-    try:
-        region_filter = request.args.get('region', '').strip()
-        search = request.args.get('search', '').strip().lower()
-
-        ports_list = []
-        for name, info in WORLD_PORTS.items():
-            if region_filter and info['region'].lower() != region_filter.lower():
-                continue
-            if search and search not in name.lower() and search not in info['country'].lower():
-                continue
-            ports_list.append({
-                'name': name,
-                'lat': info['lat'],
-                'lon': info['lon'],
-                'region': info['region'],
-                'country': info['country'],
-            })
-
-        # Group by region for frontend convenience
-        regions = {}
-        for p in ports_list:
-            regions.setdefault(p['region'], []).append(p)
-
-        return jsonify({
-            'success': True,
-            'count': len(ports_list),
-            'ports': ports_list,
-            'by_region': regions,
-        }), 200
-
-    except Exception as exc:
-        current_app.logger.error(f'Ports listing error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': 'Internal server error.'}), 500
+    ports = [{"name": k, **v} for k, v in WORLD_PORTS.items()]
+    ports.sort(key=lambda x: x["name"])
+    return jsonify({"success": True, "ports": ports, "count": len(ports)}), 200
