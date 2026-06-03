@@ -49,8 +49,8 @@ class Config:
         'http://localhost:3000',
         'https://voyageiq.vercel.app',
         'https://voyageiq-frontend.vercel.app',
+        'https://voyageiq-eaif.vercel.app',
     ]
-    # Also allow any *.vercel.app subdomain (handles preview deployments)
     CORS_SUPPORTS_CREDENTIALS = True
 
 

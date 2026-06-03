@@ -10,7 +10,7 @@ VoyageIQ AI - Maritime Intelligence Platform
 Flask Application Factory
 """
 import os
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from .extensions import db
@@ -37,7 +37,18 @@ def create_app(config_name=None):
          supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         expose_headers=['Content-Type', 'Authorization'],
     )
+    # Allow all Vercel preview URLs via wildcard
+    @app.after_request
+    def add_cors_headers(response):
+        origin = request.headers.get('Origin', '')
+        if origin.endswith('.vercel.app') or origin in ['http://localhost:5173', 'http://localhost:3000']:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        return response
     
     # Register blueprints
     from .routes.auth import auth_bp
