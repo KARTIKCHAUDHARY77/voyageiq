@@ -87,8 +87,7 @@ Would you like me to drill down into any specific area?`,
 // ── Markdown renderer (simple) ────────────────────────────────────────────────
 
 function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split('
-')
+  const lines = text.split('\n')
   return lines.map((line, i) => {
     // Bold **text**
     const bold = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
