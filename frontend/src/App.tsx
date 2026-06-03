@@ -29,6 +29,7 @@ import {
   Activity,
   Waves,
   CloudLightning,
+  ClipboardList,
 } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
 
@@ -45,6 +46,7 @@ const ClaimsPage = React.lazy(() => import('./pages/ClaimsPage'))
 const CopilotPage = React.lazy(() => import('./pages/CopilotPage'))
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage'))
 const WeatherIntelligencePage = React.lazy(() => import('./pages/WeatherIntelligencePage'))
+const NoonReportPage = React.lazy(() => import('./pages/NoonReportPage'))
 
 // ─── Nav Items ────────────────────────────────────────────────────────────────
 interface NavItem {
@@ -64,6 +66,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/claims', label: 'Claim Detector', icon: AlertTriangle },
   { path: '/copilot', label: 'AI Copilot', icon: Bot },
   { path: '/reports', label: 'Reports', icon: FileBarChart2 },
+  { path: '/noon-reports', label: 'Noon Reports', icon: ClipboardList },
 ]
 
 // ─── Page Transition Wrapper ──────────────────────────────────────────────────
@@ -488,6 +491,13 @@ function AppShell() {
                 <ProtectedRoute>
                   <PageWrapper>
                     <WeatherIntelligencePage />
+                  </PageWrapper>
+                </ProtectedRoute>
+              } />
+              <Route path="/noon-reports" element={
+                <ProtectedRoute>
+                  <PageWrapper>
+                    <NoonReportPage />
                   </PageWrapper>
                 </ProtectedRoute>
               } />
