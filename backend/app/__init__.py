@@ -32,23 +32,30 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     JWTManager(app)
-    CORS(app,
-         origins=app.config['CORS_ORIGINS'],
-         supports_credentials=True,
-         allow_headers=['Content-Type', 'Authorization'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         expose_headers=['Content-Type', 'Authorization'],
-    )
-    # Allow all Vercel preview URLs via wildcard
+    # Manual CORS — handles ALL origins including Vercel previews
+    # This is more reliable than Flask-CORS for Railway deployments
+    @app.before_request
+    def handle_preflight():
+        if request.method == 'OPTIONS':
+            from flask import make_response
+            res = make_response()
+            res.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            res.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            res.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            res.headers['Access-Control-Allow-Credentials'] = 'true'
+            res.headers['Access-Control-Max-Age'] = '3600'
+            return res, 200
+
     @app.after_request
     def add_cors_headers(response):
         origin = request.headers.get('Origin', '')
-        if origin.endswith('.vercel.app') or origin in ['http://localhost:5173', 'http://localhost:3000']:
+        if origin:
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
         return response
+
     
     # Register blueprints
     from .routes.auth import auth_bp
