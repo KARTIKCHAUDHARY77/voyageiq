@@ -87,13 +87,12 @@ def create_app(config_name=None):
     
     with app.app_context():
         try:
-            # checkfirst=True prevents duplicate type errors on PostgreSQL
-            db.create_all(checkfirst=True)
+            db.create_all()
         except Exception as e:
             print(f"db.create_all warning (continuing): {e}")
             try:
                 db.session.rollback()
-                db.create_all(checkfirst=True)
+                db.create_all()
             except Exception:
                 pass
         _seed_demo_data()

@@ -1,11 +1,14 @@
 import axios from 'axios'
 
+// In production: VITE_API_URL is empty → uses relative '/api' path → Vercel proxies to Railway
+// In development: falls back to localhost:5000
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000'
 
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+  withCredentials: false,
 })
 
 api.interceptors.request.use((config) => {
