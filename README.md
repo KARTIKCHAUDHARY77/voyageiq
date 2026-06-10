@@ -12,7 +12,7 @@
 
 ---
 
-> © 2024 **Kartik Chaudhary**. All Rights Reserved.  
+> © 2026 **Kartik Chaudhary**. All Rights Reserved.  
 > This project is **NOT open source**. Unauthorized copying, forking, reproduction,  
 > or submission of this code is strictly prohibited and constitutes intellectual property theft.
 
@@ -43,7 +43,7 @@ VoyageIQ AI is a production-grade maritime SaaS platform for intelligent vessel 
 ## Legal
 
 ```
-Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
+Copyright (c) 2026 Kartik Chaudhary. All Rights Reserved.
 
 This software is proprietary and confidential. Unauthorized copying,
 forking, modification, distribution, or use of this software, in whole
@@ -59,4 +59,4 @@ work is a violation of intellectual property law.
 
 ---
 
-*VoyageIQ AI — Built with ❤️ by Kartik Chaudhary | 2024*
+*VoyageIQ AI — Built by Kartik Chaudhary | 2026*
