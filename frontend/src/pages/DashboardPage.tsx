@@ -163,10 +163,10 @@ export default function DashboardPage() {
   }
 
   const perfChartData = {
-    labels: vessels.map(v => v.name.replace('MV ', '').replace('MT ', '')),
+    labels: (kpis?.by_vessel || []).map(v => v.name.replace('MV ', '').replace('MT ', '')),
     datasets: [{
-      label: 'Performance Score',
-      data: vessels.map(() => Math.random() * 25 + 70),
+      label: 'Speed compliance %',
+      data: (kpis?.by_vessel || []).map(v => v.speed_compliance_pct),
       backgroundColor: ['rgba(20,184,166,0.7)', 'rgba(14,165,233,0.7)', 'rgba(139,92,246,0.7)', 'rgba(245,158,11,0.7)'],
       borderRadius: 6,
     }],
@@ -175,7 +175,7 @@ export default function DashboardPage() {
   const weatherChartData = {
     labels: ['Calm (Bft 0-3)', 'Moderate (Bft 4-5)', 'Rough (Bft 6+)'],
     datasets: [{
-      data: [45, 35, 20],
+      data: kpis?.weather_mix ? [kpis.weather_mix.calm, kpis.weather_mix.moderate, kpis.weather_mix.rough] : [],
       backgroundColor: ['rgba(16,185,129,0.8)', 'rgba(245,158,11,0.7)', 'rgba(239,68,68,0.7)'],
       borderWidth: 0,
     }],
@@ -213,33 +213,41 @@ export default function DashboardPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Distance" value={kpis?.total_distance_nm?.toFixed(0) || '—'} unit="nm" icon={<Navigation size={18} />} color="ocean" trend={3.2} trendLabel="vs last period" loading={loading} delay={0} />
-        <KPICard title="Average Speed" value={kpis?.avg_speed?.toFixed(1) || '—'} unit="kts" icon={<Activity size={18} />} color="teal" trend={-0.8} loading={loading} delay={0.05} />
-        <KPICard title="Fuel Consumed" value={kpis?.total_fuel_consumed?.toFixed(0) || '—'} unit="MT" icon={<Fuel size={18} />} color="amber" trend={5.1} loading={loading} delay={0.1} />
-        <KPICard title="Weather Risk" value={kpis?.weather_risk_score?.toFixed(0) || '—'} unit="/100" icon={<Wind size={18} />} color={kpis?.weather_risk_score && kpis.weather_risk_score > 60 ? 'red' : 'sky'} loading={loading} delay={0.15} />
-        <KPICard title="Fuel Efficiency" value={kpis?.fuel_efficiency?.toFixed(2) || '—'} unit="nm/MT" icon={<BarChart3 size={18} />} color="green" trend={1.4} loading={loading} delay={0.2} />
-        <KPICard title="Idle Days" value={kpis?.idle_days || '—'} unit="days" icon={<Clock size={18} />} color="purple" loading={loading} delay={0.25} />
-        <KPICard title="Performance Score" value={kpis?.performance_score?.toFixed(1) || '—'} unit="%" icon={<TrendingUp size={18} />} color="teal" trend={2.1} loading={loading} delay={0.3} />
-        <KPICard title="Estimated Savings" value={kpis ? `$${(kpis.estimated_savings_usd / 1000).toFixed(0)}K` : '—'} icon={<DollarSign size={18} />} color="emerald" trend={8.7} loading={loading} delay={0.35} />
+        <KPICard title="Total Distance" value={kpis?.total_distance_nm?.toFixed(0) || '—'} unit="nm" icon={<Navigation size={18} />} color="ocean" trendLabel="vs last period" loading={loading} delay={0} />
+        <KPICard title="Average Speed" value={kpis?.avg_speed?.toFixed(1) || '—'} unit="kts" icon={<Activity size={18} />} color="teal" loading={loading} delay={0.05} />
+        <KPICard title="Fuel Consumed" value={kpis?.total_fuel_consumed?.toFixed(0) || '—'} unit="MT" icon={<Fuel size={18} />} color="amber" loading={loading} delay={0.1} />
+        <KPICard title="Rough-Weather Days" value={kpis?.weather_risk_score != null ? kpis.weather_risk_score.toFixed(0) : '—'} unit="%" icon={<Wind size={18} />} color={kpis?.weather_risk_score && kpis.weather_risk_score > 60 ? 'red' : 'sky'} loading={loading} delay={0.15} />
+        <KPICard title="Fuel Efficiency" value={kpis?.fuel_efficiency?.toFixed(2) || '—'} unit="nm/MT" icon={<BarChart3 size={18} />} color="green" loading={loading} delay={0.2} />
+        <KPICard title="Idle Days" value={kpis?.idle_days ?? '—'} unit="days" icon={<Clock size={18} />} color="purple" loading={loading} delay={0.25} />
+        <KPICard title="Speed Compliance" value={kpis?.performance_score != null ? kpis.performance_score.toFixed(1) : '—'} unit="%" icon={<TrendingUp size={18} />} color="teal" loading={loading} delay={0.3} />
+        <KPICard title="Excess Fuel Cost" value={kpis?.excess_fuel_cost_usd != null ? `$${(kpis.excess_fuel_cost_usd / 1000).toFixed(0)}K` : '—'} icon={<DollarSign size={18} />} color="emerald" loading={loading} delay={0.35} />
       </div>
 
       {/* Middle Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Health Score */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="glass-card p-6 rounded-2xl flex flex-col items-center">
-          <HealthGauge score={kpis?.fleet_health_score || 78} grade={kpis?.fleet_health_score && kpis.fleet_health_score >= 90 ? 'Excellent' : kpis?.fleet_health_score && kpis.fleet_health_score >= 70 ? 'Good' : 'Average'} />
-          <div className="mt-4 w-full space-y-2">
-            {[['Fuel Efficiency', 82], ['Speed Compliance', 74], ['Weather Handling', 79], ['Operational', 76]].map(([label, val]) => (
-              <div key={label} className="flex items-center gap-3">
-                <span className="text-xs text-navy-400 w-32">{label}</span>
-                <div className="flex-1 bg-navy-800 rounded-full h-1.5">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${val}%` }} transition={{ delay: 0.8, duration: 0.8 }}
-                    className="h-1.5 rounded-full bg-teal-500" />
-                </div>
-                <span className="text-xs text-navy-300 w-8">{val}%</span>
+          {kpis?.fleet_health_score != null ? (
+            <>
+              <HealthGauge score={kpis.fleet_health_score} grade={kpis.fleet_health_score >= 85 ? 'Excellent' : kpis.fleet_health_score >= 70 ? 'Good' : kpis.fleet_health_score >= 50 ? 'Average' : 'Poor'} />
+              <div className="mt-4 w-full space-y-2">
+                {([['Fuel Efficiency', 'fuel_efficiency'], ['Speed Compliance', 'speed_compliance'], ['Weather Handling', 'weather_handling'], ['Operational', 'operational']] as const).map(([label, key]) => {
+                  const val = kpis.health_breakdown?.[key]
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <span className="text-xs text-navy-400 w-32">{label}</span>
+                      <div className="flex-1 bg-navy-800 rounded-full h-1.5">
+                        {val != null && <div className="h-1.5 rounded-full bg-teal-500" style={{ width: `${val}%` }} />}
+                      </div>
+                      <span className="text-xs text-navy-300 w-8">{val != null ? `${val}%` : '—'}</span>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <p className="text-sm text-navy-400 text-center py-10">No noon reports yet, so there is no health score to show.</p>
+          )}
         </motion.div>
 
         {/* Active Vessels */}

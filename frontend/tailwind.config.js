@@ -7,6 +7,32 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Design tokens (see src/index.css). Prefer these in new code.
+        base: 'rgb(var(--c-base) / <alpha-value>)',
+        surface: {
+          1: 'rgb(var(--c-surface-1) / <alpha-value>)',
+          2: 'rgb(var(--c-surface-2) / <alpha-value>)',
+        },
+        line: {
+          DEFAULT: 'rgb(var(--c-line) / 0.14)',
+          strong: 'rgb(var(--c-line) / 0.26)',
+        },
+        fg: {
+          DEFAULT: 'rgb(var(--c-fg) / <alpha-value>)',
+          muted: 'rgb(var(--c-fg-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--c-fg-subtle) / <alpha-value>)',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
+          strong: 'rgb(var(--c-accent-strong) / <alpha-value>)',
+        },
+        signal: {
+          port: 'rgb(var(--c-port) / <alpha-value>)',
+          starboard: 'rgb(var(--c-starboard) / <alpha-value>)',
+          caution: 'rgb(var(--c-caution) / <alpha-value>)',
+          depth: 'rgb(var(--c-depth) / <alpha-value>)',
+        },
+        // Legacy palette, kept until each page is migrated
         // Maritime Navy Palette (600-950 are surfaces; 100-500 are text tones)
         navy: {
           950: '#020B18',
@@ -60,6 +86,23 @@ export default {
           400: '#34D399',
           300: '#6EE7B7',
         }
+      },
+      // Six-step type scale. Body copy is never smaller than 13px; 11-12px is for metadata.
+      fontSize: {
+        meta: ['11px', { lineHeight: '16px', letterSpacing: '0.04em' }],
+        label: ['12px', { lineHeight: '16px' }],
+        body: ['13px', { lineHeight: '20px' }],
+        lead: ['15px', { lineHeight: '24px' }],
+        title: ['20px', { lineHeight: '28px', letterSpacing: '-0.015em' }],
+        display: ['28px', { lineHeight: '34px', letterSpacing: '-0.02em' }],
+      },
+      borderRadius: {
+        ctl: 'var(--radius-ctl)',
+        panel: 'var(--radius-panel)',
+      },
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        'in-out-strong': 'cubic-bezier(0.77, 0, 0.175, 1)',
       },
       fontFamily: {
         sans: ['IBM Plex Sans', 'Inter', 'system-ui', 'sans-serif'],

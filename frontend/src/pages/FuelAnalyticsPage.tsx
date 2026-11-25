@@ -37,7 +37,7 @@ export default function FuelAnalyticsPage() {
     try {
       const [fRes, wRes] = await Promise.allSettled([
         analyticsAPI.fuel(selectedVessel || undefined),
-        analyticsAPI.weatherImpact(),
+        analyticsAPI.weatherImpact(selectedVessel || undefined),
       ])
       if (fRes.status === 'fulfilled') setFuelData(fRes.value.data)
       if (wRes.status === 'fulfilled') setWeatherData(wRes.value.data)
@@ -59,33 +59,38 @@ export default function FuelAnalyticsPage() {
     ],
   }
 
+  const warranted = fuelData?.warranted
+  const warrantedNmPerMt = warranted?.speed && warranted?.consumption ? (warranted.speed * 24) / warranted.consumption : null
+
   const efficiencyData = {
     labels,
     datasets: [
-      { label: 'Actual Efficiency', data: daily.map((d: any) => d.total > 0 ? ((d.me || 0) * 24 / d.total) : 0), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.1)', tension: 0.4, fill: true },
-      { label: 'Benchmark', data: daily.map(() => 8.5), borderColor: '#F59E0B', borderDash: [5, 5], tension: 0 },
+      { label: 'Actual (nm/MT)', data: daily.map((d: any) => d.total > 0 && d.distance > 0 ? d.distance / d.total : null), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.1)', tension: 0.3, spanGaps: true },
+      ...(warrantedNmPerMt ? [{ label: 'Warranted (nm/MT)', data: daily.map(() => warrantedNmPerMt), borderColor: '#F59E0B', borderDash: [5, 5], pointRadius: 0, tension: 0 }] : []),
     ],
   }
 
+  const split = fuelData?.fuel_type_split || { lsfo: 0, mgo: 0 }
   const fuelTypeData = {
     labels: ['LSFO', 'MGO'],
-    datasets: [{ data: [78, 22], backgroundColor: ['rgba(20,184,166,0.8)', 'rgba(14,165,233,0.7)'], borderWidth: 0 }],
+    datasets: [{ data: [split.lsfo, split.mgo], backgroundColor: ['rgba(20,184,166,0.8)', 'rgba(14,165,233,0.7)'], borderWidth: 0 }],
   }
 
   const robData = {
     labels,
     datasets: [
-      { label: 'ROB LSFO', data: daily.map((_: any, i: number) => Math.max(200, 1200 - i * 40 + Math.random() * 20)), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.15)', fill: true, tension: 0.4 },
-      { label: 'ROB MGO', data: daily.map((_: any, i: number) => Math.max(30, 150 - i * 5 + Math.random() * 5)), borderColor: '#0EA5E9', backgroundColor: 'rgba(14,165,233,0.1)', fill: true, tension: 0.4 },
+      { label: 'ROB LSFO (MT)', data: daily.map((d: any) => d.rob_lsfo), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.15)', fill: true, tension: 0.3, spanGaps: true },
+      { label: 'ROB MGO (MT)', data: daily.map((d: any) => d.rob_mgo), borderColor: '#0EA5E9', backgroundColor: 'rgba(14,165,233,0.1)', fill: true, tension: 0.3, spanGaps: true },
     ],
   }
 
-  const insights = fuelData?.insights || [
-    'Fuel consumption increased by 8.3% due to Beaufort 5 conditions in days 12-15.',
-    'ME efficiency is within 2% of warranted values. Good performance.',
-    'AE consumption spike detected on day 8. Recommend auxiliary engine audit.',
-    'ROB LSFO critically low. Arrange bunkering at next port call.',
-  ]
+  const insights: string[] = [...(fuelData?.insights || []), ...(weatherData?.insights || [])]
+  const noData = !loading && fuelData?.data_source === 'none'
+
+  const BAND_LABELS: Record<string, string> = { calm_0_3: 'Beaufort 0-3', moderate_4_5: 'Beaufort 4-5', rough_6_7: 'Beaufort 6-7', severe_8_plus: 'Beaufort 8+' }
+  const weatherRows = Object.entries(weatherData?.weather_bands || {})
+    .map(([key, v]: [string, any]) => ({ key, label: BAND_LABELS[key] || key, ...v }))
+    .filter((r: any) => r.report_count > 0)
 
   const insightIcon = (i: number) => {
     if (i === 0) return <AlertCircle size={14} className="text-orange-400 shrink-0 mt-0.5" />
@@ -93,11 +98,6 @@ export default function FuelAnalyticsPage() {
     return <Info size={14} className="text-ocean-400 shrink-0 mt-0.5" />
   }
 
-  const weatherRows = weatherData?.by_beaufort || [
-    { beaufort: '0-3 (Calm)', days: 8, avg_speed: 14.2, excess_cons: 0.0, impact: 0 },
-    { beaufort: '4-5 (Moderate)', days: 9, avg_speed: 13.6, excess_cons: 1.8, impact: 6720 },
-    { beaufort: '6+ (Rough)', days: 3, avg_speed: 12.1, excess_cons: 4.2, impact: 7812 },
-  ]
 
   return (
     <div className="space-y-6">
@@ -113,13 +113,19 @@ export default function FuelAnalyticsPage() {
         </select>
       </div>
 
+      {noData && (
+        <div role="status" className="glass-card p-5 text-sm text-navy-300">
+          No noon reports for this vessel yet. Add or upload reports and the charts below will fill in.
+        </div>
+      )}
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Consumption', value: fuelData?.total_consumption ? `${fuelData.total_consumption.toFixed(0)} MT` : '—', icon: Fuel, color: 'text-amber-400' },
-          { label: 'Daily Average', value: fuelData?.daily_avg ? `${fuelData.daily_avg.toFixed(1)} MT/d` : '—', icon: Activity, color: 'text-teal-400' },
-          { label: 'Total Cost', value: fuelData?.total_cost_usd ? `$${(fuelData.total_cost_usd / 1000).toFixed(0)}K` : '—', icon: DollarSign, color: 'text-green-400' },
-          { label: 'Avg Efficiency', value: fuelData?.avg_efficiency ? `${fuelData.avg_efficiency.toFixed(2)} nm/MT` : '—', icon: TrendingUp, color: 'text-ocean-400' },
+          { label: 'Total Consumption', value: fuelData?.total_consumed_mt != null ? `${fuelData.total_consumed_mt.toFixed(0)} MT` : '—', icon: Fuel, color: 'text-amber-400' },
+          { label: 'Daily Average', value: fuelData?.total_consumed_mt != null && daily.length ? `${(fuelData.total_consumed_mt / (fuelData.daily_consumption.length || 1)).toFixed(1)} MT/d` : '—', icon: Activity, color: 'text-teal-400' },
+          { label: `Cost at $${fuelData?.bunker_price_per_mt ?? '—'}/MT (assumed)`, value: fuelData?.total_cost_usd != null ? `$${(fuelData.total_cost_usd / 1000).toFixed(0)}K` : '—', icon: DollarSign, color: 'text-green-400' },
+          { label: 'Avg Efficiency', value: fuelData?.avg_efficiency != null ? `${fuelData.avg_efficiency.toFixed(2)} nm/MT` : '—', icon: TrendingUp, color: 'text-ocean-400' },
         ].map(({ label, value, icon: Icon, color }, i) => (
           <motion.div key={label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
             className="glass-card p-5 rounded-2xl">
@@ -143,7 +149,7 @@ export default function FuelAnalyticsPage() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-4">Fuel Efficiency vs Benchmark (nm/MT)</h3>
+          <h3 className="text-sm font-semibold text-white mb-4">Fuel Efficiency vs Warranted (nm/MT)</h3>
           <div style={{ height: 220 }}><Line data={efficiencyData} options={CHART_OPTS as any} /></div>
         </motion.div>
 
@@ -153,10 +159,10 @@ export default function FuelAnalyticsPage() {
         </motion.div>
       </div>
 
-      {/* AI Insights */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card p-6 rounded-2xl">
+      {/* Findings */}
+      {insights.length > 0 && <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card p-6 rounded-2xl">
         <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-          <Activity size={14} className="text-teal-400" /> AI-Generated Fuel Insights
+          <Activity size={14} className="text-teal-400" /> Findings from the data
         </h3>
         <div className="space-y-3">
           {insights.map((insight: string, i: number) => (
@@ -167,7 +173,7 @@ export default function FuelAnalyticsPage() {
             </motion.div>
           ))}
         </div>
-      </motion.div>
+      </motion.div>}
 
       {/* Weather Impact Table */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card p-6 rounded-2xl">
@@ -176,29 +182,23 @@ export default function FuelAnalyticsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                {['Beaufort Conditions', 'Days', 'Avg Speed (kts)', 'Excess Consumption (MT/d)', 'Commercial Impact ($)'].map(h => (
+                {['Beaufort Conditions', 'Report days', 'Speed loss vs warranted (kn)', 'Excess ME burn (MT/d)'].map(h => (
                   <th key={h} className="text-left py-2 px-3 text-xs text-navy-500 font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {weatherRows.map((row: any, i: number) => (
-                <tr key={i} className="border-b border-white/3 hover:bg-white/2">
-                  <td className="py-3 px-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${i === 0 ? 'bg-green-500/15 text-green-400' : i === 1 ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
-                      {row.beaufort}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-navy-300">{row.days}</td>
-                  <td className="py-3 px-3 text-white font-medium">{row.avg_speed?.toFixed(1)}</td>
-                  <td className={`py-3 px-3 font-medium ${row.excess_cons > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    {row.excess_cons > 0 ? '+' : ''}{row.excess_cons?.toFixed(1)}
-                  </td>
-                  <td className="py-3 px-3">
-                    {row.impact > 0 ? <span className="text-red-400 font-bold">${row.impact.toLocaleString()}</span> : <span className="text-green-400">No impact</span>}
-                  </td>
+              {weatherRows.map((row: any) => (
+                <tr key={row.key} className="border-b border-white/3">
+                  <td className="py-3 px-3 text-navy-300">{row.label}</td>
+                  <td className="py-3 px-3 text-navy-300 tabular-nums">{row.report_count}</td>
+                  <td className="py-3 px-3 text-white tabular-nums">{row.avg_speed_loss_kn != null ? row.avg_speed_loss_kn.toFixed(2) : '—'}</td>
+                  <td className="py-3 px-3 text-white tabular-nums">{row.avg_excess_consumption_mt != null ? `${row.avg_excess_consumption_mt > 0 ? '+' : ''}${row.avg_excess_consumption_mt.toFixed(1)}` : '—'}</td>
                 </tr>
               ))}
+              {weatherRows.length === 0 && (
+                <tr><td colSpan={4} className="py-6 px-3 text-navy-400">No reports with a recorded wind force yet.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -22,7 +22,9 @@ Operators receive daily noon reports (position, speed, fuel burned, weather) as 
 | AI Copilot | Chat over fleet data. Uses OpenAI (`gpt-4o-mini`) when a key is set, otherwise a rule-based responder |
 | Reports | Voyage reports as PDF, Excel or CSV |
 
-The analytics are heuristic models (see `backend/app/analytics/`), not validated against real fleet data. Treat the numbers as decision support, not as evidence in a charter dispute, until you have calibrated them against your own noon reports.
+**Data integrity.** Every figure on screen is computed from stored noon reports. When there is no data, the API returns `data_source: "none"` and null values, and the UI shows an en dash or an empty state. Nothing is simulated, randomised or hardcoded. Two figures rest on assumptions that the API returns with the result: the bunker price (`BUNKER_PRICE_USD_MT`, default 620) and the hire rate used to price lost time (`DEFAULT_HIRE_RATE_USD_DAY`, default 15000). Analysis windows end at the latest report, not at today's date.
+
+Claim detection compares good-weather days (Beaufort 4 or below, at least 3 of them) with the warranted speed and consumption, and stores the basis and calculation with each claim. The models are simple heuristics and are not validated against real fleet data. Treat them as decision support, not as evidence in a charter dispute.
 
 ## Architecture
 
@@ -142,6 +144,10 @@ All routes are under `/api` and need a bearer token except `/auth/login`, `/auth
 | `/reports` | `generate/<voyage_id>?format=pdf\|excel\|csv`, `templates` |
 
 \* admin or manager only. † admin, manager or analyst.
+
+## Component kit
+
+Reusable primitives live in `frontend/src/components/kit/` (Button, Field/Input/Select, Panel, PageHeader, Stat, Badge, DataTable, Tabs, EmptyState/ErrorState/Skeleton). Design tokens are CSS variables in `frontend/src/index.css` and are exposed to Tailwind and to charts (`frontend/src/design/chartTheme.ts`). Run `npm run dev` and open `/ui` for a live reference. New screens should use the kit; older pages are being migrated.
 
 ## Design notes
 

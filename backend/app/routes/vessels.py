@@ -4,7 +4,7 @@ Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
 Unauthorized copying or use of this file is strictly prohibited.
 Contact: 2512520007@geu.ac.in
 """
-import uuid, random
+import uuid
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -25,45 +25,50 @@ NUMERIC_VESSEL_FIELDS = {'built_year', 'gross_tonnage', 'deadweight_tonnage', 'l
 # ---------------------------------------------------------------------------
 def _compute_health_score(vessel, reports):
     if not reports:
-        fuel_score    = round(random.uniform(16, 22), 1)
-        speed_score   = round(random.uniform(17, 24), 1)
-        weather_score = round(random.uniform(17, 23), 1)
-        ops_score     = round(random.uniform(15, 22), 1)
-    else:
-        # Fuel efficiency
-        nm_mt = [r.distance_noon_to_noon / r.me_lsfo
-                 for r in reports
-                 if r.me_lsfo and r.me_lsfo > 0 and r.distance_noon_to_noon]
-        benchmark = float(vessel.warranted_consumption or 28.5)
-        fuel_score = round(min(25, (sum(nm_mt)/len(nm_mt) / (benchmark / 24)) * 25), 1) if nm_mt else 18.0
+        return {
+            'total': None, 'grade': 'No data',
+            'fuel_efficiency_score': None, 'speed_compliance_score': None,
+            'weather_handling_score': None, 'operational_score': None,
+            'recommendations': ['Add noon reports to compute a health score.'],
+            'total_score': None, 'grade_color': 'slate', 'breakdown': {},
+        }
+    warranted_cons = float(vessel.warranted_consumption) if vessel.warranted_consumption else None
+    warranted_speed = float(vessel.warranted_speed) if vessel.warranted_speed else None
 
-        # Speed compliance
-        wsp = vessel.warranted_speed or 14.0
-        sv = [abs((r.speed_over_ground or 0) - float(wsp)) for r in reports if r.speed_over_ground]
-        speed_score = round(max(0, 25 * (1 - (sum(sv)/len(sv) / 2.0))), 1) if sv else 20.0
+    # Each component is scored out of 25, or left None when the inputs are missing.
+    nm_mt = [float(r.distance_noon_to_noon) / float(r.me_lsfo) for r in reports
+             if r.me_lsfo and r.me_lsfo > 0 and r.distance_noon_to_noon]
+    fuel_score = None
+    if nm_mt and warranted_cons and warranted_speed:
+        # Warranted efficiency in nm per MT: (speed x 24h) / daily consumption.
+        expected_nm_mt = warranted_speed * 24 / warranted_cons
+        fuel_score = round(min(25, (sum(nm_mt) / len(nm_mt) / expected_nm_mt) * 25), 1)
 
-        # Weather handling
-        wf = [r.wind_force_bft for r in reports if r.wind_force_bft is not None]
-        weather_score = round(max(0, 25 * (1 - (sum(wf)/len(wf) / 12.0))), 1) if wf else 20.0
+    sv = [abs(float(r.speed_over_ground) - warranted_speed) for r in reports
+          if r.speed_over_ground and warranted_speed]
+    speed_score = round(max(0, 25 * (1 - (sum(sv) / len(sv) / 2.0))), 1) if sv else None
 
-        # Operational completeness
-        complete = sum(1 for r in reports if r.distance_noon_to_noon and r.speed_over_ground)
-        ops_score = round((complete / len(reports)) * 25, 1)
+    wf = [r.wind_force_bft for r in reports if r.wind_force_bft is not None]
+    weather_score = round(max(0, 25 * (1 - (sum(wf) / len(wf) / 12.0))), 1) if wf else None
 
-    total = round(fuel_score + speed_score + weather_score + ops_score, 1)
+    complete = sum(1 for r in reports if r.distance_noon_to_noon and r.speed_over_ground)
+    ops_score = round((complete / len(reports)) * 25, 1)
+
+    parts = [x for x in (fuel_score, speed_score, weather_score, ops_score) if x is not None]
+    total = round(sum(parts) / (25 * len(parts)) * 100, 1)
     grade = 'Excellent' if total >= 85 else 'Good' if total >= 70 else 'Average' if total >= 50 else 'Poor'
 
     recs = []
-    if fuel_score < 18:
-        recs.append('Optimise ME RPM and trim settings to improve fuel efficiency. Consider slow-steaming on slack legs.')
-    if speed_score < 18:
-        recs.append('Review charter-party speed compliance. Persistent deviation may trigger performance claims.')
-    if weather_score < 18:
-        recs.append('Utilise weather-routing services proactively. Early deviation reduces fuel and risk.')
+    if fuel_score is not None and fuel_score < 18:
+        recs.append('Fuel efficiency is below the warranted benchmark. Review ME RPM and trim settings.')
+    if speed_score is not None and speed_score < 18:
+        recs.append('Speed deviates from the warranted figure. Persistent deviation may trigger performance claims.')
+    if weather_score is not None and weather_score < 18:
+        recs.append('Reports show heavy-weather exposure. Weather routing could reduce fuel and risk.')
     if ops_score < 18:
-        recs.append('Improve noon report data completeness. Accurate data is essential for benchmarking and claims defence.')
+        recs.append('Many noon reports are missing distance or speed. Complete data is needed for benchmarking and claims defence.')
     if not recs:
-        recs.append('Vessel performing well. Maintain current operational profile and monitor fuel trends weekly.')
+        recs.append('No issues flagged by the available data.')
 
     return {
         'total': total, 'grade': grade,
@@ -71,36 +76,39 @@ def _compute_health_score(vessel, reports):
         'speed_compliance_score': speed_score,
         'weather_handling_score': weather_score,
         'operational_score': ops_score,
+        'components_scored': len(parts),
         'recommendations': recs[:3],
+        'total_score': total,
+        'grade_color': 'green' if total >= 85 else 'teal' if total >= 70 else 'amber' if total >= 50 else 'red',
+        'breakdown': {
+            'fuel_efficiency': fuel_score, 'speed_compliance': speed_score,
+            'weather_handling': weather_score, 'operational': ops_score,
+        },
     }
 
 def _compute_performance(vessel, reports):
     if not reports:
-        ws = float(vessel.warranted_speed or 14.0)
-        wc = float(vessel.warranted_consumption or 28.5)
         return {
-            'avg_speed': round(ws * 0.96, 2),
-            'speed_variance': round(random.uniform(-0.4, 0.2), 2),
-            'avg_consumption': round(wc * 1.02, 1),
-            'consumption_variance': round(random.uniform(-0.5, 2.0), 2),
-            'fuel_efficiency': round(24 * ws / wc, 3),
-            'compliance_pct': round(random.uniform(88, 97), 1),
-            'report_count': 0,
+            'avg_speed': None, 'speed_variance': None, 'avg_consumption': None,
+            'consumption_variance': None, 'fuel_efficiency': None,
+            'compliance_pct': None, 'report_count': 0,
         }
     speeds = [r.speed_over_ground for r in reports if r.speed_over_ground]
     cons   = [r.me_lsfo for r in reports if r.me_lsfo]
-    ws     = float(vessel.warranted_speed or 14.0)
-    wc     = float(vessel.warranted_consumption or 28.5)
-    avg_s  = sum(speeds) / len(speeds) if speeds else ws
-    avg_c  = sum(cons) / len(cons) if cons else wc
-    compliant = sum(1 for s in speeds if abs(s - ws) <= 0.5)
+    ws     = float(vessel.warranted_speed) if vessel.warranted_speed else None
+    wc     = float(vessel.warranted_consumption) if vessel.warranted_consumption else None
+    speeds = [float(x) for x in speeds]
+    cons   = [float(x) for x in cons]
+    avg_s  = sum(speeds) / len(speeds) if speeds else None
+    avg_c  = sum(cons) / len(cons) if cons else None
+    compliant = sum(1 for s in speeds if ws is not None and abs(s - ws) <= 0.5)
     return {
-        'avg_speed': round(avg_s, 2),
-        'speed_variance': round(avg_s - ws, 2),
-        'avg_consumption': round(avg_c, 1),
-        'consumption_variance': round(avg_c - wc, 2),
-        'fuel_efficiency': round(24 * avg_s / avg_c, 3) if avg_c else 0,
-        'compliance_pct': round((compliant / len(speeds)) * 100, 1) if speeds else 95.0,
+        'avg_speed': round(avg_s, 2) if avg_s is not None else None,
+        'speed_variance': round(avg_s - ws, 2) if avg_s is not None and ws is not None else None,
+        'avg_consumption': round(avg_c, 1) if avg_c is not None else None,
+        'consumption_variance': round(avg_c - wc, 2) if avg_c is not None and wc is not None else None,
+        'fuel_efficiency': round(24 * avg_s / avg_c, 3) if avg_s is not None and avg_c else None,
+        'compliance_pct': round((compliant / len(speeds)) * 100, 1) if speeds and ws is not None else None,
         'report_count': len(reports),
     }
 
@@ -135,8 +143,10 @@ def list_vessels():
             # Report count
             nr_count = NoonReport.query.join(Voyage, NoonReport.voyage_id == Voyage.id).filter(Voyage.vessel_id == v.id).count()
             vd['report_count'] = nr_count
-            # Quick health score (no reports needed for list view)
-            hs = _compute_health_score(v, [])
+            # Health score from the 30 most recent noon reports (None when there are none)
+            recent = (NoonReport.query.filter(NoonReport.vessel_id == v.id)
+                      .order_by(NoonReport.report_date.desc()).limit(30).all())
+            hs = _compute_health_score(v, recent)
             vd['health_score'] = hs['total']
             vd['health_grade']  = hs['grade']
             vessels_data.append(vd)
@@ -309,12 +319,19 @@ def get_vessel_performance(vessel_id):
         if not vessel:
             return jsonify({'error': 'Vessel not found'}), 404
         days = request.args.get('days', 30, type=int)
-        since_dt = datetime.utcnow() - timedelta(days=days)
-        reports = (
-            NoonReport.query.join(Voyage, NoonReport.voyage_id == Voyage.id)
-            .filter(Voyage.vessel_id == vessel_id, NoonReport.report_date >= since_dt)
-            .order_by(NoonReport.report_date.asc()).all()
-        )
+        # Window ends at the vessel's latest report, not at "now".
+        latest = db.session.query(db.func.max(NoonReport.report_date)).filter(
+            NoonReport.vessel_id == vessel_id).scalar()
+        reports = []
+        if latest is not None:
+            if not isinstance(latest, datetime):
+                latest = datetime(latest.year, latest.month, latest.day)
+            reports = (
+                NoonReport.query
+                .filter(NoonReport.vessel_id == vessel_id,
+                        NoonReport.report_date >= latest - timedelta(days=days))
+                .order_by(NoonReport.report_date.asc()).all()
+            )
         metrics = _compute_performance(vessel, reports)
         metrics['period_days']  = days
         metrics['vessel_id']    = vessel_id
@@ -345,8 +362,7 @@ def get_vessel_health(vessel_id):
         if not vessel:
             return jsonify({'error': 'Vessel not found'}), 404
         reports = (
-            NoonReport.query.join(Voyage, NoonReport.voyage_id == Voyage.id)
-            .filter(Voyage.vessel_id == vessel_id)
+            NoonReport.query.filter(NoonReport.vessel_id == vessel_id)
             .order_by(NoonReport.report_date.desc()).limit(30).all()
         )
         health = _compute_health_score(vessel, reports)

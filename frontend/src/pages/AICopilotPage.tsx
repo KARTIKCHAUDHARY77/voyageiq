@@ -33,14 +33,6 @@ interface ConversationMeta {
   message_count: number
 }
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-
-const MOCK_VESSELS: Vessel[] = [
-  { id: 'vs1', name: 'MV Atlantic Pioneer', imo: '9876543', type: 'Bulk Carrier', flag: 'Panama', flag_code: 'PA', dwt: 82000, loa: 229, beam: 32, draft: 14.5, engine_power: 9480, year_built: 2018, status: 'active', health_score: 87, fuel_type: 'VLSFO', active_voyage: 'VYG-2024-002', created_at: '2023-01-01T00:00:00Z' },
-  { id: 'vs2', name: 'MV Pacific Star',     imo: '9765432', type: 'Tanker',       flag: 'Marshall Islands', flag_code: 'MH', dwt: 105000, loa: 248, beam: 43, draft: 15.2, engine_power: 12600, year_built: 2020, status: 'active', health_score: 92, fuel_type: 'VLSFO', created_at: '2023-01-01T00:00:00Z' },
-  { id: 'vs3', name: 'MV Nordic Carrier',   imo: '9654321', type: 'Container',    flag: 'Liberia', flag_code: 'LR', dwt: 68000, loa: 294, beam: 32, draft: 13.0, engine_power: 15400, year_built: 2016, status: 'active', health_score: 74, fuel_type: 'MGO', created_at: '2023-01-01T00:00:00Z' },
-]
-
 const SUGGESTED_PROMPTS = [
   { icon: <Fuel className="w-4 h-4" />,       label: 'Why did fuel consumption increase?',      prompt: 'Why did fuel consumption increase on the last voyage?' },
   { icon: <TrendingUp className="w-4 h-4" />,  label: 'How can I save fuel?',                   prompt: 'What are the best strategies to reduce fuel consumption for this vessel?' },
@@ -48,19 +40,6 @@ const SUGGESTED_PROMPTS = [
   { icon: <Ship className="w-4 h-4" />,        label: 'Analyze vessel performance',             prompt: 'Provide a comprehensive analysis of the current vessel performance.' },
   { icon: <FileText className="w-4 h-4" />,    label: 'Show open claims summary',               prompt: 'Summarize all open charter party claims and their financial impact.' },
 ]
-
-const MOCK_AI_RESPONSES: Record<string, Omit<ChatMessage, 'id' | 'conversation_id' | 'role' | 'timestamp'>> = {
-  fuel: {
-    content: `**Fuel Consumption Analysis**\n\nBased on the noon reports for *MV Atlantic Pioneer* on voyage VYG-2024-001, I've identified several contributing factors to the increased fuel consumption:\n\n1. **Adverse Weather** – The vessel encountered Beaufort 6-7 conditions between Jan 15-20, resulting in an estimated **+12% consumption increase**.\n\n2. **Speed Variance** – Average speed was 11.2 knots vs CP 13.5 knots. This caused longer sea passage time, adding approximately 140 MT of extra fuel.\n\n3. **Engine Performance** – ME specific fuel oil consumption (SFOC) shows a **3.2% degradation** compared to shop test data, suggesting possible wear or adjustment needed.\n\nThe total fuel overrun is **140 MT** valued at approximately **$112,000** at current bunker prices.`,
-    recommendations: [{ id: 'r1', title: 'Schedule engine tuning', description: 'ME SFOC degradation of 3.2% suggests adjustment is needed at next port call.', estimated_savings: 45000 }, { id: 'r2', title: 'Review CP weather allowances', description: 'Apply weather-based allowances to the charter party claim for the Jan 15-20 period.' }],
-    warnings: ['Charter party claim window for this voyage closes in 14 days.'],
-  },
-  default: {
-    content: `**Maritime AI Analysis Complete**\n\nI've reviewed the available data for your query. Here is my assessment:\n\n- Fleet average fuel efficiency is **3.2% below** target\n- 2 active charter party claims require immediate attention\n- Optimal route via the Suez Canal saves an estimated **$48,000** in fuel\n\nWould you like me to drill down into any specific area?`,
-    recommendations: [{ id: 'r3', title: 'Optimize trim settings', description: 'Adjusting trim by 0.5m stern could reduce fuel consumption by 2-3%.', estimated_savings: 22000 }],
-    warnings: [],
-  },
-}
 
 // ── Markdown renderer (simple) ────────────────────────────────────────────────
 
@@ -187,7 +166,7 @@ export default function AICopilotPage() {
   const [messages, setMessages]               = useState<ChatMessage[]>([])
   const [input, setInput]                     = useState('')
   const [loading, setLoading]                 = useState(false)
-  const [vessels, setVessels]                 = useState<Vessel[]>(MOCK_VESSELS)
+  const [vessels, setVessels]                 = useState<Vessel[]>([])
   const [selectedVessel, setSelectedVessel]   = useState<string>('')
   const [conversations, setConversations]     = useState<ConversationMeta[]>([])
   const [conversationId, setConversationId]   = useState<string | undefined>()
@@ -216,15 +195,15 @@ export default function AICopilotPage() {
   const fetchVessels = async () => {
     try {
       const res = await vesselsAPI.list()
-      if (res.data?.length) setVessels(res.data)
-    } catch { /* use mock */ }
+      setVessels(res.data?.vessels ?? res.data ?? [])
+    } catch { /* the vessel picker stays empty; chat still works */ }
   }
 
   const fetchConversations = async () => {
     try {
       const res = await copilotAPI.getConversations()
-      if (res.data?.length) setConversations(res.data)
-    } catch { /* use mock */ }
+      setConversations(res.data?.conversations ?? [])
+    } catch { /* history is optional */ }
   }
 
   const autoResize = () => {
@@ -267,20 +246,14 @@ export default function AICopilotPage() {
       } as ChatMessage
       setMessages(prev => [...prev, aiMsg])
     } catch {
-      // Provide a plausible mock response
-      const lc = content.toLowerCase()
-      const mockKey = lc.includes('fuel') || lc.includes('consumption') ? 'fuel' : 'default'
-      const mock = MOCK_AI_RESPONSES[mockKey]
-      const aiMsg: ChatMessage & { recommendations?: unknown; warnings?: unknown } = {
+      const failed: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        conversation_id: 'mock-conv',
+        conversation_id: conversationId ?? '',
         role: 'assistant',
-        content: mock.content,
+        content: 'The assistant could not be reached, so this question was not answered. Try again in a moment.',
         timestamp: new Date().toISOString(),
-        recommendations: mock.recommendations,
-        warnings: mock.warnings,
-      }
-      setMessages(prev => [...prev, aiMsg as ChatMessage])
+      } as ChatMessage
+      setMessages(prev => [...prev, failed])
     } finally {
       setLoading(false)
     }

@@ -42,8 +42,9 @@ const VoyagesPage = React.lazy(() => import('./pages/VoyagesPage'))
 const VoyageDetailPage = React.lazy(() => import('./pages/VoyageDetailPage'))
 const FuelAnalyticsPage = React.lazy(() => import('./pages/FuelAnalyticsPage'))
 const VoyageOptimizerPage = React.lazy(() => import('./pages/VoyageOptimizerPage'))
-const ClaimsPage = React.lazy(() => import('./pages/ClaimsPage'))
-const CopilotPage = React.lazy(() => import('./pages/CopilotPage'))
+const ClaimsPage = React.lazy(() => import('./pages/ClaimDetectorPage'))
+const CopilotPage = React.lazy(() => import('./pages/AICopilotPage'))
+const UiKitPage = import.meta.env.DEV ? React.lazy(() => import('./pages/UiKitPage')) : null
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage'))
 const WeatherIntelligencePage = React.lazy(() => import('./pages/WeatherIntelligencePage'))
 const NoonReportPage = React.lazy(() => import('./pages/NoonReportPage'))
@@ -184,22 +185,6 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       </div>
 
-      {/* Online Status Pill */}
-      <AnimatePresence>
-        {!collapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mx-4 mt-3 mb-1 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/15 flex items-center gap-2"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-blink" />
-            <span className="text-[11px] text-green-400/80 font-medium">Fleet Online</span>
-            <span className="ml-auto text-[10px] text-white/30">Live</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
@@ -291,42 +276,6 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Bottom Actions */}
       <div className="p-2 space-y-0.5">
-        {/* Notifications */}
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-[color,background-color,border-color,opacity,transform] duration-200">
-          <div className="relative flex-shrink-0">
-            <Bell size={18} />
-            <span className="notification-badge" style={{ background: '#ef4444' }}>3</span>
-          </div>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-sm font-medium"
-              >
-                Notifications
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* Settings */}
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-[color,background-color,border-color,opacity,transform] duration-200">
-          <Settings size={18} className="flex-shrink-0" />
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-sm font-medium"
-              >
-                Settings
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
       </div>
 
       {/* User Profile */}
@@ -388,7 +337,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               className="mt-2 flex items-center gap-2"
             >
               <Activity className="w-3 h-3 text-teal-400/50" />
-              <span className="text-[10px] text-white/25 truncate">{user.company_name || 'VoyageIQ Platform'}</span>
+              <span className="text-[10px] text-white/25 truncate">{user.company_name || ''}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -501,6 +450,9 @@ function AppShell() {
                   </PageWrapper>
                 </ProtectedRoute>
               } />
+              {UiKitPage && (
+                <Route path="/ui" element={<PageWrapper><UiKitPage /></PageWrapper>} />
+              )}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </AnimatePresence>

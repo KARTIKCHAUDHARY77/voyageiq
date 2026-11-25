@@ -63,7 +63,9 @@ export default function VesselDetailPage() {
   )
   if (!vessel) return <div className="text-center py-20 text-navy-400">Vessel not found</div>
 
-  const posPoints: [number, number][] = positions.map((p: any) => [p.latitude, p.longitude]).filter(Boolean)
+  const posPoints: [number, number][] = positions
+    .map((p: any): [number, number] => [Number(p.lat ?? p.latitude), Number(p.lon ?? p.longitude)])
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b))
   const gradeColor = health?.grade_color || (health?.total_score && health.total_score >= 90 ? 'green' : health?.total_score && health.total_score >= 70 ? 'teal' : health?.total_score && health.total_score >= 50 ? 'yellow' : 'red') || 'teal'
 
   return (

@@ -18,7 +18,9 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      token: null,
+      // Restored synchronously so a page reload on a deep link is not bounced to /login
+      // while the profile is still loading. The server still validates the token.
+      token: typeof localStorage !== 'undefined' ? localStorage.getItem('voyageiq_token') : null,
       isLoading: false,
       error: null,
 

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend } from 'chart.js'
 import { Bar, Doughnut } from 'react-chartjs-2'
 import { Wind, Waves, ArrowUp, ArrowDown, ArrowRight, Navigation2, Fuel, Clock, AlertTriangle, TrendingUp, TrendingDown, Zap } from 'lucide-react'
-import { analyticsAPI } from '../services/api'
+import { analyticsAPI, weatherAPI } from '../services/api'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend)
 
@@ -140,9 +140,30 @@ export default function WeatherIntelligencePage() {
     currentFavorable: false, baseSpeed: 14, baseFuel: 28.5,
   })
 
+  const [attribution, setAttribution] = useState<any>(null)
+  const [attributionError, setAttributionError] = useState(false)
+
   useEffect(() => {
     analyticsAPI.weatherImpact().then(res => setWeatherData(res.data)).catch(console.error)
   }, [])
+
+  // Model output for the scenario above. Swell is not an input here, so it is sent as 0.
+  useEffect(() => {
+    if (activeTab !== 'attribution') return
+    const t = setTimeout(() => {
+      weatherAPI.attribution({
+        wind_speed_knots: scenario.windSpeed,
+        wave_height_m: scenario.waveHeight,
+        swell_height_m: 0,
+        current_speed_knots: scenario.currentSpeed,
+        current_favorable: scenario.currentFavorable,
+        base_fuel_mt_day: scenario.baseFuel,
+      })
+        .then(res => { setAttribution(res.data); setAttributionError(false) })
+        .catch(() => setAttributionError(true))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [activeTab, scenario.windSpeed, scenario.waveHeight, scenario.currentSpeed, scenario.currentFavorable, scenario.baseFuel])
 
   const tabs = [
     { key: 'headwind', label: 'Headwind', icon: ArrowUp },
@@ -157,12 +178,18 @@ export default function WeatherIntelligencePage() {
     headwind: 'head', tailwind: 'tail', crosswind: 'cross', current: 'cross', beaufort: 'head', attribution: 'head'
   }
 
-  // Attribution chart data (fuel breakdown by cause)
+  const ATTR_ROWS: Array<{ key: string; label: string; color: string; text: string; rgba: string }> = [
+    { key: 'normal_consumption', label: 'Normal consumption', color: 'bg-teal-500', text: 'text-teal-400', rgba: 'rgba(20,184,166,0.8)' },
+    { key: 'wind_impact', label: 'Wind', color: 'bg-red-500', text: 'text-red-400', rgba: 'rgba(239,68,68,0.75)' },
+    { key: 'wave_impact', label: 'Wave resistance', color: 'bg-amber-500', text: 'text-amber-400', rgba: 'rgba(245,158,11,0.75)' },
+    { key: 'current_impact', label: 'Current', color: 'bg-ocean-500', text: 'text-ocean-400', rgba: 'rgba(14,165,233,0.75)' },
+    { key: 'swell_impact', label: 'Swell', color: 'bg-purple-500', text: 'text-purple-400', rgba: 'rgba(139,92,246,0.7)' },
+  ]
   const attributionData = {
-    labels: ['Normal Consumption', 'Wind Impact', 'Wave Impact', 'Current Impact', 'Swell Impact'],
+    labels: ATTR_ROWS.map(r => r.label),
     datasets: [{
-      data: [62, 14, 10, 8, 6],
-      backgroundColor: ['rgba(20,184,166,0.8)', 'rgba(239,68,68,0.75)', 'rgba(245,158,11,0.75)', 'rgba(14,165,233,0.75)', 'rgba(139,92,246,0.7)'],
+      data: ATTR_ROWS.map(r => attribution?.attribution?.[r.key]?.mt_day ?? 0),
+      backgroundColor: ATTR_ROWS.map(r => r.rgba),
       borderWidth: 0,
     }],
   }
@@ -171,7 +198,7 @@ export default function WeatherIntelligencePage() {
     labels: BEAUFORT.slice(0, 10).map(b => `Bft ${b.scale}`),
     datasets: [{
       label: 'Days at Scale',
-      data: [3, 4, 5, 4, 4, 3, 2, 1, 1, 0],
+      data: (weatherData?.beaufort_histogram || []).slice(0, 10),
       backgroundColor: BEAUFORT.slice(0, 10).map(b =>
         b.severity === 'low' ? 'rgba(16,185,129,0.7)' : b.severity === 'moderate' ? 'rgba(245,158,11,0.7)' : b.severity === 'high' ? 'rgba(249,115,22,0.7)' : 'rgba(239,68,68,0.7)'
       ),
@@ -201,7 +228,7 @@ export default function WeatherIntelligencePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Controls Panel */}
-        {activeTab !== 'beaufort' && activeTab !== 'attribution' && (
+        {activeTab !== 'beaufort' && (
           <div className="glass-card p-5 rounded-2xl space-y-4">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               {activeTab === 'headwind' && <><ArrowUp size={14} className="text-red-400" />Headwind Analysis</>}
@@ -256,7 +283,7 @@ export default function WeatherIntelligencePage() {
         )}
 
         {/* Results */}
-        <div className={activeTab === 'beaufort' || activeTab === 'attribution' ? 'lg:col-span-3' : 'lg:col-span-2'}>
+        <div className={activeTab === 'beaufort' ? 'lg:col-span-3' : 'lg:col-span-2'}>
           {/* Headwind/Tailwind/Crosswind/Current */}
           {['headwind', 'tailwind', 'crosswind', 'current'].includes(activeTab) && (
             <div className="glass-card p-5 rounded-2xl space-y-4">
@@ -369,7 +396,7 @@ export default function WeatherIntelligencePage() {
                 </div>
               </div>
               <div className="glass-card p-5 rounded-2xl">
-                <h3 className="text-sm font-semibold text-white mb-4">Beaufort Distribution (Current Voyage)</h3>
+                <h3 className="text-sm font-semibold text-white mb-4">Beaufort Distribution (report days in the stored data)</h3>
                 <div style={{ height: 200 }}>
                   <Bar data={beaufortDistData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' } } } } as any} />
                 </div>
@@ -379,82 +406,35 @@ export default function WeatherIntelligencePage() {
 
           {/* Attribution */}
           {activeTab === 'attribution' && (
-            <div className="space-y-5">
-              <div className="glass-card p-6 rounded-2xl">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2"><Fuel size={14} className="text-amber-400" />Fuel Consumption Attribution Analysis</h3>
+            <div className="glass-card p-6 rounded-2xl">
+              <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2"><Fuel size={14} className="text-amber-400" />Fuel attribution for the scenario</h3>
+              <p className="text-xs text-navy-400 mb-4">Model estimate from the wind, wave and current inputs above. It is not measured from your noon reports.</p>
+              {attributionError && <p role="alert" className="text-sm text-danger-400">Could not compute the attribution. Try again.</p>}
+              {!attribution && !attributionError && <p className="text-sm text-navy-400">Calculating…</p>}
+              {attribution && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <div style={{ height: 260 }}>
-                      <Doughnut data={attributionData} options={{ responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 }, padding: 12 } }, tooltip: { backgroundColor: '#0A1F3A', titleColor: '#e2e8f0', bodyColor: '#94a3b8' } } } as any} />
-                    </div>
+                  <div style={{ height: 260 }}>
+                    <Doughnut data={attributionData} options={{ responsive: true, maintainAspectRatio: false, animation: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 } } } } }} />
                   </div>
                   <div className="space-y-3">
-                    <p className="text-xs text-navy-400 mb-3">Total Fuel: <span className="text-white font-bold">52 MT</span> per day</p>
-                    {[
-                      { label: 'Normal Consumption', value: 32.2, pct: 62, color: 'bg-teal-500', textColor: 'text-teal-400' },
-                      { label: 'Wind Impact', value: 7.3, pct: 14, color: 'bg-red-500', textColor: 'text-red-400' },
-                      { label: 'Wave Resistance', value: 5.2, pct: 10, color: 'bg-amber-500', textColor: 'text-amber-400' },
-                      { label: 'Current Penalty', value: 4.2, pct: 8, color: 'bg-ocean-500', textColor: 'text-ocean-400' },
-                      { label: 'Swell Impact', value: 3.1, pct: 6, color: 'bg-purple-500', textColor: 'text-purple-400' },
-                    ].map(({ label, value, pct, color, textColor }) => (
-                      <div key={label}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-navy-300">{label}</span>
-                          <span className={`font-bold ${textColor}`}>{value} MT ({pct}%)</span>
+                    <p className="text-xs text-navy-400">Total: <span className="text-white font-semibold tabular-nums">{attribution.total_fuel_mt_day.toFixed(1)} MT/day</span> · weather adds <span className="text-white font-semibold tabular-nums">{attribution.weather_excess_pct.toFixed(1)}%</span> to the base {scenario.baseFuel} MT/day</p>
+                    {ATTR_ROWS.map(({ key, label, color, text }) => {
+                      const row = attribution.attribution[key]
+                      return (
+                        <div key={key}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-navy-300">{label}</span>
+                            <span className={`font-semibold tabular-nums ${text}`}>{row.mt_day.toFixed(1)} MT ({row.pct.toFixed(0)}%)</span>
+                          </div>
+                          <div className="h-1.5 bg-navy-800 rounded-full">
+                            <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${Math.min(100, row.pct)}%` }} />
+                          </div>
                         </div>
-                        <div className="h-1.5 bg-navy-800 rounded-full">
-                          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, delay: 0.1 }}
-                            className={`h-1.5 rounded-full ${color}`} />
-                        </div>
-                      </div>
-                    ))}
-                    <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                      <p className="text-xs text-amber-400 font-semibold mb-1">⚡ Attribution Insight</p>
-                      <p className="text-xs text-navy-300">38% of fuel (19.8 MT/d) is caused by adverse weather conditions. Optimal weather routing could save <strong className="text-green-400">$8,600/voyage</strong>.</p>
-                    </div>
+                      )
+                    })}
                   </div>
                 </div>
-              </div>
-
-              {/* Detailed attribution table */}
-              <div className="glass-card p-5 rounded-2xl">
-                <h3 className="text-sm font-semibold text-white mb-4">Voyage Day-by-Day Attribution Breakdown</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-white/5">
-                        {['Day', 'Total Fuel', 'Normal', 'Wind +', 'Wave +', 'Current +', 'Swell +', 'Beaufort', 'Net Impact'].map(h => (
-                          <th key={h} className="py-2 px-2 text-left text-navy-500 whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from({ length: 10 }, (_, i) => {
-                        const base = 28.5 + Math.random() * 3
-                        const wind = Math.random() * 4
-                        const wave = Math.random() * 2
-                        const current = (Math.random() - 0.4) * 2
-                        const swell = Math.random() * 1.5
-                        const bft = Math.floor(Math.random() * 7)
-                        const total = base + wind + wave + current + swell
-                        return (
-                          <tr key={i} className="border-b border-white/3 hover:bg-white/2">
-                            <td className="py-2 px-2 text-navy-400">Day {i + 1}</td>
-                            <td className="py-2 px-2 font-bold text-white">{total.toFixed(1)}</td>
-                            <td className="py-2 px-2 text-teal-400">{base.toFixed(1)}</td>
-                            <td className={`py-2 px-2 ${wind > 2 ? 'text-red-400' : 'text-orange-400'}`}>+{wind.toFixed(1)}</td>
-                            <td className={`py-2 px-2 ${wave > 1 ? 'text-orange-400' : 'text-yellow-400'}`}>+{wave.toFixed(1)}</td>
-                            <td className={`py-2 px-2 ${current > 0 ? 'text-red-400' : 'text-green-400'}`}>{current > 0 ? '+' : ''}{current.toFixed(1)}</td>
-                            <td className="py-2 px-2 text-purple-400">+{swell.toFixed(1)}</td>
-                            <td className="py-2 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${bft <= 3 ? 'bg-green-500/15 text-green-400' : bft <= 5 ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>Bft {bft}</span></td>
-                            <td className={`py-2 px-2 font-bold ${(total - base) > 3 ? 'text-red-400' : 'text-orange-400'}`}>+{(total - base).toFixed(1)}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           )}
         </div>

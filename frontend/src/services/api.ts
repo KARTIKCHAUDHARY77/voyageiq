@@ -91,7 +91,7 @@ export const analyticsAPI = {
   dashboard: () => api.get('/api/analytics/dashboard'),
   fuel: (vesselId?: string) => api.get('/api/analytics/fuel', { params: { vessel_id: vesselId } }),
   performance: (vesselId?: string) => api.get('/api/analytics/performance', { params: { vessel_id: vesselId } }),
-  weatherImpact: () => api.get('/api/analytics/weather-impact'),
+  weatherImpact: (vesselId?: string) => api.get('/api/analytics/weather-impact', { params: { vessel_id: vesselId } }),
 }
 
 export const claimsAPI = {
@@ -100,7 +100,7 @@ export const claimsAPI = {
   create: (data: object) => api.post('/api/claims', data),
   updateStatus: (id: string, status: string, notes?: string) =>
     api.put(`/api/claims/${id}/status`, { status, notes }),
-  detect: (voyageId: string) => api.get(`/api/claims/detect/${voyageId}`),
+  detect: (voyageId: string) => api.post(`/api/claims/detect/${voyageId}`),
 }
 
 export const optimizationAPI = {

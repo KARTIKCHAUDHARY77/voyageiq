@@ -61,21 +61,6 @@ const statusConfig: Record<ClaimStatus, { label: string; bg: string; text: strin
   pending:      { label: 'Pending',      bg: 'bg-white/10',       text: 'text-white/50'    },
 }
 
-// ── Mock data (used when API not reachable) ───────────────────────────────────
-const MOCK_VOYAGES: Voyage[] = [
-  { id: 'v1', voyage_number: 'VYG-2024-001', vessel_id: 'vs1', vessel_name: 'MV Atlantic Pioneer', status: 'completed', departure_port: 'Rotterdam', arrival_port: 'Singapore', departure_date: '2024-01-10', arrival_date: '2024-02-08', distance_total: 11200, distance_covered: 11200, avg_speed: 12.4, cp_speed: 13.5, fuel_consumed: 1240, cp_fuel: 1100, created_at: '2024-01-10T00:00:00Z' },
-  { id: 'v2', voyage_number: 'VYG-2024-002', vessel_id: 'vs2', vessel_name: 'MV Pacific Star', status: 'in_progress', departure_port: 'Houston', arrival_port: 'Rotterdam', departure_date: '2024-03-01', arrival_date: '2024-03-22', distance_total: 9800, distance_covered: 6500, avg_speed: 13.1, cp_speed: 13.5, fuel_consumed: 890, cp_fuel: 980, created_at: '2024-03-01T00:00:00Z' },
-  { id: 'v3', voyage_number: 'VYG-2024-003', vessel_id: 'vs3', vessel_name: 'MV Nordic Carrier', status: 'completed', departure_port: 'Cape Town', arrival_port: 'Hamburg', departure_date: '2024-02-15', arrival_date: '2024-03-10', distance_total: 8600, distance_covered: 8600, avg_speed: 11.8, cp_speed: 13.0, fuel_consumed: 1450, cp_fuel: 1250, created_at: '2024-02-15T00:00:00Z' },
-]
-
-const MOCK_CLAIMS: Claim[] = [
-  { id: 'c1', voyage_id: 'v1', vessel_name: 'MV Atlantic Pioneer', voyage_number: 'VYG-2024-001', type: 'speed_loss', severity: 'critical', status: 'open', period_start: '2024-01-15', period_end: '2024-01-28', expected_value: 13.5, actual_value: 11.2, variance: -2.3, estimated_impact_usd: 48500, currency: 'USD', description: 'Vessel consistently underperformed on speed by 2.3 knots below CP warranty during adverse weather window.', created_at: '2024-02-09T08:00:00Z', updated_at: '2024-02-09T08:00:00Z' },
-  { id: 'c2', voyage_id: 'v1', vessel_name: 'MV Atlantic Pioneer', voyage_number: 'VYG-2024-001', type: 'excess_consumption', severity: 'high', status: 'open', period_start: '2024-01-10', period_end: '2024-02-08', expected_value: 1100, actual_value: 1240, variance: 140, estimated_impact_usd: 31200, currency: 'USD', description: 'Fuel consumption exceeded charter party allowance by 140 MT during the voyage.', created_at: '2024-02-09T08:00:00Z', updated_at: '2024-02-09T08:00:00Z' },
-  { id: 'c3', voyage_id: 'v3', vessel_name: 'MV Nordic Carrier', voyage_number: 'VYG-2024-003', type: 'underperformance', severity: 'high', status: 'acknowledged', period_start: '2024-02-20', period_end: '2024-03-05', expected_value: 13.0, actual_value: 11.8, variance: -1.2, estimated_impact_usd: 22700, currency: 'USD', description: 'Performance index below threshold due to propeller fouling, resulting in underperformance claim.', created_at: '2024-03-11T09:00:00Z', updated_at: '2024-03-12T10:00:00Z' },
-  { id: 'c4', voyage_id: 'v2', vessel_name: 'MV Pacific Star', voyage_number: 'VYG-2024-002', type: 'weather_deviation', severity: 'medium', status: 'pending', period_start: '2024-03-05', period_end: '2024-03-12', expected_value: 0, actual_value: 0, variance: 0, estimated_impact_usd: 8900, currency: 'USD', description: 'Vessel deviated from agreed route to avoid weather, resulting in additional fuel consumption.', created_at: '2024-03-15T11:00:00Z', updated_at: '2024-03-15T11:00:00Z' },
-  { id: 'c5', voyage_id: 'v1', vessel_name: 'MV Atlantic Pioneer', voyage_number: 'VYG-2024-001', type: 'speed_loss', severity: 'medium', status: 'resolved', period_start: '2024-01-29', period_end: '2024-02-05', expected_value: 13.5, actual_value: 12.8, variance: -0.7, estimated_impact_usd: 5600, currency: 'USD', description: 'Minor speed variance due to biofouling.', created_at: '2024-02-09T08:00:00Z', updated_at: '2024-02-20T14:00:00Z' },
-]
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 interface StatCardProps {
@@ -247,8 +232,8 @@ const ClaimCard: React.FC<ClaimCardProps> = ({ claim, onUpdateStatus }) => {
 type FilterTab = 'all' | 'open' | 'critical' | 'high' | 'acknowledged'
 
 export default function ClaimDetectorPage() {
-  const [claims, setClaims]             = useState<Claim[]>(MOCK_CLAIMS)
-  const [voyages, setVoyages]           = useState<Voyage[]>(MOCK_VOYAGES)
+  const [claims, setClaims]             = useState<Claim[]>([])
+  const [voyages, setVoyages]           = useState<Voyage[]>([])
   const [selectedVoyage, setSelectedVoyage] = useState<string>('')
   const [detecting, setDetecting]       = useState(false)
   const [loading, setLoading]           = useState(false)
@@ -266,10 +251,10 @@ export default function ClaimDetectorPage() {
         claimsAPI.list(),
         voyagesAPI.list(),
       ])
-      if (claimsRes.data?.length)  setClaims(claimsRes.data)
-      if (voyagesRes.data?.length) setVoyages(voyagesRes.data)
+      setClaims(claimsRes.data?.claims ?? claimsRes.data ?? [])
+      setVoyages(voyagesRes.data?.voyages ?? voyagesRes.data ?? [])
     } catch {
-      // Use mock data silently
+      toast.error('Could not load claims. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -291,10 +276,7 @@ export default function ClaimDetectorPage() {
         toast.success('No new claims detected for this voyage.')
       }
     } catch {
-      toast.error('Detection failed – showing mock results')
-      // Simulate detection result
-      await new Promise(r => setTimeout(r, 1200))
-      toast.success('Mock detection complete – 2 claims found')
+      toast.error('Detection failed. Try again.')
     } finally {
       setDetecting(false)
     }
