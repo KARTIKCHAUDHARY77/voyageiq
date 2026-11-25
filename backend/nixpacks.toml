@@ -5,4 +5,4 @@ nixPkgs = ["python311"]
 cmds = ["python -m pip install -r requirements.txt"]
 
 [start]
-cmd = "python run.py"
+cmd = "sh start.sh"

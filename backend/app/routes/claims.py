@@ -1,130 +1,141 @@
 """
-VoyageIQ AI — Maritime Intelligence Platform
-Copyright (c) 2024 Kartik Chaudhary. All Rights Reserved.
-Unauthorized copying or use of this file is strictly prohibited.
-Contact: 2512520007@geu.ac.in
+Charter-party performance claims.
+
+Detection compares noon-report performance with the warranted speed and
+consumption (from the voyage's charter-party terms, falling back to the vessel's
+warranted figures). Charter parties normally warrant performance in good weather
+only, so detection uses reports at Beaufort 4 or below and says so in each claim.
+
+The hire rate and bunker price are assumptions, not measurements. They are
+stored with every claim so a reviewer can see exactly what the dollar figure
+rests on.
 """
+import os
+from datetime import date, datetime
 
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
 
-from ..models import Claim, Voyage, Vessel, NoonReport
 from ..extensions import db
+from ..models import Claim, NoonReport, Vessel, Voyage
+from ..security import CLAIM_WRITE_ROLES, roles_required
 
 claims_bp = Blueprint('claims', __name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+HIRE_RATE_USD_DAY = float(os.environ.get('DEFAULT_HIRE_RATE_USD_DAY', '15000'))
+BUNKER_PRICE_USD_MT = float(os.environ.get('BUNKER_PRICE_USD_MT', '620'))
 
-DEFAULT_HIRE_RATE_PER_DAY = 15_000.0   # USD/day
-DEFAULT_BUNKER_PRICE_PER_MT = 620.0    # USD/MT
+GOOD_WEATHER_MAX_BFT = 4
+MIN_GOOD_WEATHER_REPORTS = 3
+SPEED_SHORTFALL_KN = 0.3          # flag when average speed is this far below warranted
+EXCESS_CONSUMPTION_PCT = 5.0      # flag when average burn is this far above warranted
 
-SPEED_LOSS_THRESHOLD_KN = -0.3         # avg variance below CP speed
-EXCESS_CONSUMPTION_THRESHOLD_PCT = 5.0 # % above CP consumption
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _vessel_name(voyage: Voyage) -> str:
-    return voyage.vessel.name if voyage and voyage.vessel else 'Unknown'
+VALID_STATUSES = {'open', 'acknowledged', 'disputed', 'resolved', 'closed'}
+VALID_SEVERITIES = {'low', 'medium', 'high', 'critical'}
 
 
-def _detect_claims_for_voyage(voyage: Voyage, reports: list) -> list:
-    """
-    Core detection algorithm.
-    Returns a list of dicts describing detected claims (not yet persisted).
-    """
-    detected = []
-    if not reports:
-        return detected
+def _f(v):
+    return float(v) if v is not None else None
 
-    hire_rate = voyage.hire_rate_per_day or DEFAULT_HIRE_RATE_PER_DAY
-    bunker_price = voyage.bunker_price_per_mt or DEFAULT_BUNKER_PRICE_PER_MT
 
-    # ------------------------------------------------------------------
-    # 1. Speed-loss claim
-    # ------------------------------------------------------------------
-    speed_pairs = [
-        (r.actual_speed, r.charter_party_speed)
-        for r in reports
-        if r.actual_speed is not None and r.charter_party_speed is not None
-    ]
-    if speed_pairs:
-        variances = [actual - cp for actual, cp in speed_pairs]
-        avg_variance = sum(variances) / len(variances)
+def _claim_dict(claim, voyage=None, vessel=None):
+    d = claim.to_dict()
+    d['type'] = claim.claim_type  # the UI reads `type`
+    d['notes'] = claim.notes
+    d['supporting_data'] = claim.supporting_data
+    d['bunker_price_usd'] = _f(claim.bunker_price_usd)
+    d['hire_rate_usd'] = _f(claim.hire_rate_usd)
+    voyage = voyage or db.session.get(Voyage, claim.voyage_id)
+    vessel = vessel or db.session.get(Vessel, claim.vessel_id)
+    d['voyage_number'] = voyage.voyage_number if voyage else None
+    d['vessel_name'] = vessel.name if vessel else None
+    return d
 
-        if avg_variance < SPEED_LOSS_THRESHOLD_KN:
-            # Days lost = distance / cp_speed - distance / actual_speed
-            total_distance = sum(r.distance_nm for r in reports if r.distance_nm)
-            avg_cp_speed = sum(cp for _, cp in speed_pairs) / len(speed_pairs)
-            avg_actual_speed = sum(actual for actual, _ in speed_pairs) / len(speed_pairs)
 
-            if avg_actual_speed > 0 and avg_cp_speed > 0:
-                days_lost = (
-                    total_distance / avg_actual_speed - total_distance / avg_cp_speed
-                ) / 24  # convert hours → days
-            else:
-                days_lost = 0
+def _severity(impact_usd):
+    if impact_usd >= 100_000:
+        return 'critical'
+    if impact_usd >= 50_000:
+        return 'high'
+    if impact_usd >= 10_000:
+        return 'medium'
+    return 'low'
 
-            commercial_impact = round(max(0, days_lost) * hire_rate, 2)
-            detected.append({
-                'claim_type': 'speed_loss',
-                'severity': 'high' if commercial_impact > 50_000 else 'medium',
-                'description': (
-                    f'Average speed {avg_actual_speed:.2f} kn vs CP speed {avg_cp_speed:.2f} kn '
-                    f'(variance {avg_variance:.2f} kn over {len(speed_pairs)} reports).'
-                ),
-                'avg_speed_variance_kn': round(avg_variance, 3),
-                'days_lost': round(days_lost, 2),
-                'claim_amount_usd': commercial_impact,
-                'calculation_basis': (
-                    f'{round(days_lost, 2)} days × ${hire_rate:,.0f}/day hire rate'
-                ),
+
+def _detect(voyage, vessel, reports):
+    """Return (findings, notes). Findings are unsaved dicts; notes explain what could not be assessed."""
+    findings, notes = [], []
+
+    cp_speed = _f(voyage.charter_party_speed) or _f(vessel.warranted_speed)
+    cp_cons = _f(voyage.charter_party_consumption) or _f(vessel.warranted_consumption)
+
+    good = [r for r in reports if r.wind_force_bft is not None and r.wind_force_bft <= GOOD_WEATHER_MAX_BFT]
+    if len(good) < MIN_GOOD_WEATHER_REPORTS:
+        notes.append(
+            f'Only {len(good)} good-weather report(s) (Beaufort {GOOD_WEATHER_MAX_BFT} or less); '
+            f'at least {MIN_GOOD_WEATHER_REPORTS} are needed for a performance claim.'
+        )
+        return findings, notes
+
+    period_start = min(r.report_date for r in good)
+    period_end = max(r.report_date for r in good)
+    basis = (f'{len(good)} of {len(reports)} reports at Beaufort {GOOD_WEATHER_MAX_BFT} or below '
+             f'(heavier weather excluded, as is usual for charter-party warranties).')
+
+    # 1. Speed shortfall ------------------------------------------------------
+    speeds = [(_f(r.speed_over_ground), _f(r.distance_noon_to_noon)) for r in good if r.speed_over_ground]
+    if cp_speed and speeds:
+        avg_speed = sum(s for s, _ in speeds) / len(speeds)
+        variance = avg_speed - cp_speed
+        if variance < -SPEED_SHORTFALL_KN:
+            distance = sum(d or 0 for _, d in speeds)
+            days_lost = (distance / avg_speed - distance / cp_speed) / 24 if avg_speed > 0 else 0
+            impact = round(max(0.0, days_lost) * HIRE_RATE_USD_DAY, 2)
+            findings.append({
+                'claim_type': 'speed_loss', 'severity': _severity(impact),
+                'expected_value': cp_speed, 'actual_value': round(avg_speed, 3), 'variance': round(variance, 3),
+                'unit': 'kn', 'estimated_impact_usd': impact,
+                'bunker_price_usd': None, 'hire_rate_usd': HIRE_RATE_USD_DAY,
+                'period_start': period_start, 'period_end': period_end,
+                'description': (f'Average speed {avg_speed:.2f} kn against {cp_speed:.2f} kn warranted '
+                                f'({variance:+.2f} kn).'),
+                'supporting_data': {
+                    'basis': basis, 'reports_used': len(speeds), 'distance_nm': round(distance, 1),
+                    'days_lost': round(days_lost, 2),
+                    'calculation': f'{days_lost:.2f} days lost x ${HIRE_RATE_USD_DAY:,.0f}/day hire (assumed rate)',
+                },
             })
 
-    # ------------------------------------------------------------------
-    # 2. Excess fuel consumption claim
-    # ------------------------------------------------------------------
-    cons_pairs = [
-        (r.me_consumption, r.charter_party_consumption)
-        for r in reports
-        if r.me_consumption is not None and r.charter_party_consumption is not None
-        and r.charter_party_consumption > 0
-    ]
-    if cons_pairs:
-        variances_pct = [
-            ((actual - cp) / cp) * 100
-            for actual, cp in cons_pairs
-        ]
-        avg_variance_pct = sum(variances_pct) / len(variances_pct)
-
-        if avg_variance_pct > EXCESS_CONSUMPTION_THRESHOLD_PCT:
-            total_cp_cons = sum(cp for _, cp in cons_pairs)
-            total_actual_cons = sum(actual for actual, _ in cons_pairs)
-            excess_fuel_mt = max(0.0, total_actual_cons - total_cp_cons)
-            commercial_impact = round(excess_fuel_mt * bunker_price, 2)
-
-            detected.append({
-                'claim_type': 'excess_consumption',
-                'severity': 'high' if commercial_impact > 30_000 else 'medium',
-                'description': (
-                    f'Average ME consumption {avg_variance_pct:.1f}% above CP allowance '
-                    f'over {len(cons_pairs)} reports. '
-                    f'Total excess: {excess_fuel_mt:.1f} MT.'
-                ),
-                'avg_consumption_variance_pct': round(avg_variance_pct, 2),
-                'excess_fuel_mt': round(excess_fuel_mt, 2),
-                'claim_amount_usd': commercial_impact,
-                'calculation_basis': (
-                    f'{round(excess_fuel_mt, 2)} MT × ${bunker_price:,.0f}/MT bunker price'
-                ),
+    # 2. Excess consumption ---------------------------------------------------
+    burns = []
+    for r in good:
+        burn = (_f(r.me_lsfo) or 0) + (_f(r.me_mgo) or 0)
+        if burn > 0:
+            burns.append(burn)
+    if cp_cons and burns:
+        avg_burn = sum(burns) / len(burns)
+        variance_pct = (avg_burn - cp_cons) / cp_cons * 100
+        if variance_pct > EXCESS_CONSUMPTION_PCT:
+            excess_mt = (avg_burn - cp_cons) * len(burns)
+            impact = round(excess_mt * BUNKER_PRICE_USD_MT, 2)
+            findings.append({
+                'claim_type': 'excess_consumption', 'severity': _severity(impact),
+                'expected_value': cp_cons, 'actual_value': round(avg_burn, 3),
+                'variance': round(avg_burn - cp_cons, 3), 'unit': 'MT/day',
+                'estimated_impact_usd': impact,
+                'bunker_price_usd': BUNKER_PRICE_USD_MT, 'hire_rate_usd': None,
+                'period_start': period_start, 'period_end': period_end,
+                'description': (f'Main-engine burn {avg_burn:.1f} MT/day against {cp_cons:.1f} MT/day '
+                                f'warranted ({variance_pct:+.1f}%).'),
+                'supporting_data': {
+                    'basis': basis, 'reports_used': len(burns), 'excess_mt': round(excess_mt, 2),
+                    'calculation': f'{excess_mt:.1f} MT x ${BUNKER_PRICE_USD_MT:,.0f}/MT bunker price (assumed price)',
+                },
             })
 
-    return detected
+    if not cp_speed and not cp_cons:
+        notes.append('No warranted speed or consumption is recorded for this voyage or vessel.')
+    return findings, notes
 
 
 # ---------------------------------------------------------------------------
@@ -134,255 +145,122 @@ def _detect_claims_for_voyage(voyage: Voyage, reports: list) -> list:
 @claims_bp.route('', methods=['GET'])
 @jwt_required()
 def list_claims():
-    """List all claims with optional filters by status and severity."""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        status_filter = request.args.get('status')
-        severity_filter = request.args.get('severity')
-        voyage_id_filter = request.args.get('voyage_id', type=int)
-        vessel_id_filter = request.args.get('vessel_id', type=int)
+    page = max(request.args.get('page', 1, type=int), 1)
+    per_page = min(max(request.args.get('per_page', 50, type=int), 1), 100)
 
-        query = Claim.query
+    query = Claim.query
+    for arg in ('status', 'severity', 'voyage_id', 'vessel_id'):
+        value = request.args.get(arg)
+        if value:
+            query = query.filter(getattr(Claim, arg) == value)
 
-        if status_filter:
-            query = query.filter_by(status=status_filter)
-        if severity_filter:
-            query = query.filter_by(severity=severity_filter)
-        if voyage_id_filter:
-            query = query.filter_by(voyage_id=voyage_id_filter)
-        if vessel_id_filter:
-            # Join through Voyage to filter by vessel
-            query = query.join(Voyage, Claim.voyage_id == Voyage.id).filter(
-                Voyage.vessel_id == vessel_id_filter
-            )
+    pagination = query.order_by(Claim.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    open_exposure = db.session.query(db.func.coalesce(db.func.sum(Claim.estimated_impact_usd), 0)).filter(
+        Claim.status == 'open').scalar()
 
-        pagination = query.order_by(Claim.created_at.desc()).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
-
-        claims_data = []
-        for c in pagination.items:
-            cd = c.to_dict()
-            voyage = Voyage.query.get(c.voyage_id) if c.voyage_id else None
-            cd['vessel_name'] = _vessel_name(voyage) if voyage else None
-            cd['voyage_number'] = voyage.voyage_number if voyage else None
-            claims_data.append(cd)
-
-        total_open_amount = (
-            db.session.query(db.func.sum(Claim.claim_amount_usd))
-            .filter_by(status='open')
-            .scalar() or 0
-        )
-
-        return jsonify({
-            'claims': claims_data,
-            'total': pagination.total,
-            'page': pagination.page,
-            'pages': pagination.pages,
-            'per_page': per_page,
-            'total_open_amount_usd': round(float(total_open_amount), 2),
-        })
-    except Exception as e:
-        return jsonify({'error': 'Failed to retrieve claims', 'details': str(e)}), 500
+    return jsonify({
+        'claims': [_claim_dict(c) for c in pagination.items],
+        'total': pagination.total, 'page': pagination.page, 'pages': pagination.pages,
+        'per_page': per_page, 'open_exposure_usd': round(float(open_exposure or 0), 2),
+    })
 
 
-@claims_bp.route('/<int:claim_id>', methods=['GET'])
+@claims_bp.route('/<claim_id>', methods=['GET'])
 @jwt_required()
 def get_claim(claim_id):
-    """Get full details for a single claim."""
-    try:
-        claim = Claim.query.get(claim_id)
-        if not claim:
-            return jsonify({'error': 'Claim not found'}), 404
-
-        data = claim.to_dict()
-        voyage = Voyage.query.get(claim.voyage_id) if claim.voyage_id else None
-        if voyage:
-            data['vessel_name'] = _vessel_name(voyage)
-            data['voyage_number'] = voyage.voyage_number
-            data['departure_port'] = voyage.departure_port
-            data['arrival_port'] = voyage.arrival_port
-
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': 'Failed to retrieve claim', 'details': str(e)}), 500
+    claim = db.session.get(Claim, claim_id)
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
+    return jsonify(_claim_dict(claim))
 
 
 @claims_bp.route('', methods=['POST'])
 @jwt_required()
+@roles_required(*CLAIM_WRITE_ROLES)
 def create_claim():
-    """Manually create a new claim."""
+    data = request.get_json(silent=True) or {}
+    missing = [f for f in ('voyage_id', 'claim_type', 'description') if not data.get(f)]
+    if missing:
+        return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
+
+    voyage = db.session.get(Voyage, data['voyage_id'])
+    if not voyage:
+        return jsonify({'error': 'Voyage not found'}), 404
+    severity = data.get('severity', 'medium')
+    if severity not in VALID_SEVERITIES:
+        return jsonify({'error': f'severity must be one of: {", ".join(sorted(VALID_SEVERITIES))}'}), 400
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Request body required'}), 400
+        impact = float(data['estimated_impact_usd']) if data.get('estimated_impact_usd') not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'error': 'estimated_impact_usd must be a number'}), 400
 
-        required = ['voyage_id', 'claim_type', 'description']
-        missing = [f for f in required if not data.get(f)]
-        if missing:
-            return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
-
-        voyage = Voyage.query.get(data['voyage_id'])
-        if not voyage:
-            return jsonify({'error': 'Voyage not found'}), 404
-
-        claim = Claim(
-            voyage_id=data['voyage_id'],
-            vessel_id=voyage.vessel_id,
-            claim_type=data['claim_type'],
-            severity=data.get('severity', 'medium'),
-            status=data.get('status', 'open'),
-            description=data['description'],
-            claim_amount_usd=data.get('claim_amount_usd'),
-            calculation_basis=data.get('calculation_basis', ''),
-            evidence_summary=data.get('evidence_summary', ''),
-            avg_speed_variance_kn=data.get('avg_speed_variance_kn'),
-            avg_consumption_variance_pct=data.get('avg_consumption_variance_pct'),
-            days_lost=data.get('days_lost'),
-            excess_fuel_mt=data.get('excess_fuel_mt'),
-            auto_detected=False,
-            created_at=datetime.utcnow(),
-        )
-
-        db.session.add(claim)
-        db.session.commit()
-
-        return jsonify(claim.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Failed to create claim', 'details': str(e)}), 500
+    claim = Claim(
+        voyage_id=voyage.id, vessel_id=voyage.vessel_id,
+        claim_type=str(data['claim_type'])[:100], detected_date=date.today(),
+        severity=severity, status='open', description=str(data['description'])[:5000],
+        estimated_impact_usd=impact, notes=(data.get('notes') or None),
+    )
+    db.session.add(claim)
+    db.session.commit()
+    return jsonify(_claim_dict(claim, voyage)), 201
 
 
-@claims_bp.route('/<int:claim_id>/status', methods=['PUT'])
+@claims_bp.route('/<claim_id>/status', methods=['PUT'])
 @jwt_required()
+@roles_required(*CLAIM_WRITE_ROLES)
 def update_claim_status(claim_id):
-    """Update the status of a claim (e.g. open → under_review → resolved)."""
-    try:
-        claim = Claim.query.get(claim_id)
-        if not claim:
-            return jsonify({'error': 'Claim not found'}), 404
+    claim = db.session.get(Claim, claim_id)
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
 
-        data = request.get_json()
-        if not data or not data.get('status'):
-            return jsonify({'error': 'status field is required'}), 400
+    data = request.get_json(silent=True) or {}
+    status = data.get('status')
+    if status not in VALID_STATUSES:
+        return jsonify({'error': f'status must be one of: {", ".join(sorted(VALID_STATUSES))}'}), 400
 
-        valid_statuses = {'open', 'under_review', 'disputed', 'settled', 'resolved', 'withdrawn'}
-        if data['status'] not in valid_statuses:
-            return jsonify({
-                'error': f'Invalid status. Must be one of: {", ".join(sorted(valid_statuses))}'
-            }), 400
-
-        old_status = claim.status
-        claim.status = data['status']
-
-        if data.get('resolution_notes'):
-            claim.resolution_notes = data['resolution_notes']
-        if data.get('settled_amount_usd') is not None:
-            claim.settled_amount_usd = data['settled_amount_usd']
-        if data['status'] in ('resolved', 'settled', 'withdrawn'):
-            claim.resolved_at = datetime.utcnow()
-
-        claim.updated_at = datetime.utcnow()
-        db.session.commit()
-
-        return jsonify({
-            'claim_id': claim_id,
-            'previous_status': old_status,
-            'new_status': claim.status,
-            'claim': claim.to_dict(),
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Failed to update claim status', 'details': str(e)}), 500
+    previous = claim.status
+    claim.status = status
+    if data.get('notes'):
+        claim.notes = str(data['notes'])[:5000]
+    db.session.commit()
+    return jsonify({'claim_id': claim.id, 'previous_status': previous, 'new_status': status, 'claim': _claim_dict(claim)})
 
 
-@claims_bp.route('/detect/<int:voyage_id>', methods=['GET'])
+@claims_bp.route('/detect/<voyage_id>', methods=['POST', 'GET'])
 @jwt_required()
+@roles_required(*CLAIM_WRITE_ROLES)
 def detect_claims(voyage_id):
-    """
-    Run the claim detection algorithm against a voyage's noon reports.
+    """Run detection for one voyage and save new findings. Re-running updates open claims instead of duplicating them."""
+    voyage = db.session.get(Voyage, voyage_id)
+    if not voyage:
+        return jsonify({'error': 'Voyage not found'}), 404
+    vessel = db.session.get(Vessel, voyage.vessel_id)
 
-    Steps:
-    1. Query noon reports for the voyage.
-    2. Compare actual vs CP speed → if avg variance < -0.3 kn flag speed_loss.
-    3. Compare actual vs CP consumption → if > 5% excess flag excess_consumption.
-    4. Calculate commercial impact for each flagged issue.
-    5. Auto-create Claim records for newly detected issues.
-    6. Return all detected claims.
-    """
-    try:
-        voyage = Voyage.query.get(voyage_id)
-        if not voyage:
-            return jsonify({'error': 'Voyage not found'}), 404
+    reports = NoonReport.query.filter_by(voyage_id=voyage_id).order_by(NoonReport.report_date.asc()).all()
+    base = {'voyage_id': voyage_id, 'voyage_number': voyage.voyage_number, 'vessel_name': vessel.name if vessel else None,
+            'reports_analysed': len(reports), 'detected_claims': [], 'new_claims_created': 0, 'notes': []}
+    if not reports:
+        base['notes'].append('This voyage has no noon reports, so there is nothing to assess.')
+        return jsonify(base)
 
-        reports = (
-            NoonReport.query
-            .filter_by(voyage_id=voyage_id)
-            .order_by(NoonReport.report_date.asc())
-            .all()
-        )
+    findings, notes = _detect(voyage, vessel, reports)
+    saved, created = [], 0
+    for f in findings:
+        claim = Claim.query.filter_by(voyage_id=voyage_id, claim_type=f['claim_type'], status='open').first()
+        if claim is None:
+            claim = Claim(voyage_id=voyage_id, vessel_id=voyage.vessel_id, detected_date=date.today(), status='open')
+            db.session.add(claim)
+            created += 1
+        for key, value in f.items():
+            setattr(claim, key, value)
+        saved.append(claim)
+    db.session.commit()
 
-        if not reports:
-            return jsonify({
-                'voyage_id': voyage_id,
-                'message': 'No noon reports found for this voyage. Cannot run detection.',
-                'detected_claims': [],
-                'new_claims_created': 0,
-            })
-
-        detected = _detect_claims_for_voyage(voyage, reports)
-
-        new_claims = []
-        for d in detected:
-            # Avoid duplicate auto-detected claims of the same type
-            existing = Claim.query.filter_by(
-                voyage_id=voyage_id,
-                claim_type=d['claim_type'],
-                auto_detected=True,
-            ).first()
-
-            if not existing:
-                claim = Claim(
-                    voyage_id=voyage_id,
-                    vessel_id=voyage.vessel_id,
-                    claim_type=d['claim_type'],
-                    severity=d.get('severity', 'medium'),
-                    status='open',
-                    description=d['description'],
-                    claim_amount_usd=d.get('claim_amount_usd'),
-                    calculation_basis=d.get('calculation_basis', ''),
-                    avg_speed_variance_kn=d.get('avg_speed_variance_kn'),
-                    avg_consumption_variance_pct=d.get('avg_consumption_variance_pct'),
-                    days_lost=d.get('days_lost'),
-                    excess_fuel_mt=d.get('excess_fuel_mt'),
-                    auto_detected=True,
-                    created_at=datetime.utcnow(),
-                )
-                db.session.add(claim)
-                new_claims.append(claim)
-
-        db.session.commit()
-
-        # Return all claims (including previously detected ones) for this voyage
-        all_claims = Claim.query.filter_by(voyage_id=voyage_id).order_by(
-            Claim.created_at.desc()
-        ).all()
-
-        return jsonify({
-            'voyage_id': voyage_id,
-            'voyage_number': voyage.voyage_number,
-            'vessel_name': _vessel_name(voyage),
-            'reports_analysed': len(reports),
-            'detected_issues': len(detected),
-            'new_claims_created': len(new_claims),
-            'detected_claims': detected,
-            'all_voyage_claims': [c.to_dict() for c in all_claims],
-            'total_exposure_usd': round(
-                sum(d.get('claim_amount_usd', 0) for d in detected), 2
-            ),
-            'detected_at': datetime.utcnow().isoformat(),
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Claim detection failed', 'details': str(e)}), 500
+    base.update({
+        'detected_claims': [_claim_dict(c, voyage, vessel) for c in saved],
+        'new_claims_created': created, 'notes': notes,
+        'total_exposure_usd': round(sum(float(c.estimated_impact_usd or 0) for c in saved), 2),
+        'assumptions': {'hire_rate_usd_day': HIRE_RATE_USD_DAY, 'bunker_price_usd_mt': BUNKER_PRICE_USD_MT},
+        'detected_at': datetime.utcnow().isoformat(),
+    })
+    return jsonify(base)

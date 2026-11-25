@@ -729,7 +729,7 @@ def wind_impact():
 
     except Exception as exc:
         current_app.logger.error(f'Wind impact error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': 'Request failed'}), 500
 
 
 @weather_bp.route('/attribution', methods=['POST'])
@@ -753,7 +753,7 @@ def fuel_attribution():
 
     except Exception as exc:
         current_app.logger.error(f'Attribution error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': 'Request failed'}), 500
 
 
 @weather_bp.route('/grid-enhance', methods=['POST'])
@@ -833,4 +833,4 @@ def grid_enhance():
 
     except Exception as exc:
         current_app.logger.error(f'Grid enhance error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': 'Request failed'}), 500

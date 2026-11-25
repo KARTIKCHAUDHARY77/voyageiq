@@ -10,6 +10,8 @@ export interface User {
 
 export interface Vessel {
   id: string
+  health_score?: number | null
+  health_grade?: string
   imo_number: string
   name: string
   vessel_type: string
@@ -109,30 +111,34 @@ export interface Claim {
 }
 
 export interface DashboardKPIs {
-  total_distance_nm: number
-  avg_speed: number
-  total_fuel_consumed: number
-  weather_risk_score: number
-  fuel_efficiency: number
-  idle_days: number
-  performance_score: number
-  estimated_savings_usd: number
+  // Null means "no data to compute this from". The UI must show a dash, never a made-up value.
+  total_distance_nm: number | null
+  avg_speed: number | null
+  total_fuel_consumed: number | null
+  weather_risk_score: number | null   // % of report days at Beaufort 6+
+  fuel_efficiency: number | null      // nm per MT
+  idle_days: number | null            // report days with speed under 1 kn
+  performance_score: number | null    // % of report days within 0.5 kn of warranted speed
+  excess_fuel_cost_usd: number | null // ME burn above warranted, at the assumed bunker price
   active_vessels: number
   active_voyages: number
   open_claims: number
-  fleet_health_score: number
+  fleet_health_score: number | null
+  health_breakdown: Partial<Record<'fuel_efficiency' | 'speed_compliance' | 'weather_handling' | 'operational', number>>
+  by_vessel: Array<{ id: string; name: string; report_count: number; health: number | null; speed_compliance_pct: number | null }>
+  weather_mix: { calm: number; moderate: number; rough: number } | null
+  report_count: number
+  period_days: number
+  period_end: string | null
+  data_source: 'live' | 'none'
+  assumptions: { bunker_price_usd_mt: number; speed_tolerance_kn: number }
 }
 
 export interface VesselHealth {
-  total_score: number
+  total_score: number | null
   grade: string
   grade_color: string
-  breakdown: {
-    fuel_efficiency: number
-    speed_compliance: number
-    weather_handling: number
-    operational: number
-  }
+  breakdown: Partial<Record<'fuel_efficiency' | 'speed_compliance' | 'weather_handling' | 'operational', number | null>>
   recommendations: string[]
 }
 

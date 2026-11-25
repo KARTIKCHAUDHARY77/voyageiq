@@ -1,8 +1,16 @@
+# Secrets: never commit these. Only .env.example is tracked.
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+*.pem
+*.key
+
 # Node
 node_modules/
 dist/
-.env
-.env.local
 
 # Python
 __pycache__/
@@ -14,7 +22,12 @@ env/
 *.egg-info/
 .eggs/
 
-# IDE
+# Local databases (contain user records and password hashes)
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
 .vscode/
 .idea/
 *.swp

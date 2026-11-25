@@ -357,13 +357,8 @@ CREATE INDEX idx_fuel_analytics_date ON fuel_analytics(period_date);
 CREATE INDEX idx_voyages_vessel ON voyages(vessel_id);
 CREATE INDEX idx_voyages_status ON voyages(status);
 
--- ===========================================
--- SEED DATA - Demo Users
--- ===========================================
-INSERT INTO users (email, password_hash, full_name, company_name, role) VALUES
-('admin@voyageiq.com', crypt('password123', gen_salt('bf')), 'Admin User', 'VoyageIQ Demo', 'admin'),
-('captain@oceancargo.com', crypt('password123', gen_salt('bf')), 'Capt. James Harbor', 'Ocean Cargo Lines', 'master'),
-('analyst@oceancargo.com', crypt('password123', gen_salt('bf')), 'Sarah Chen', 'Ocean Cargo Lines', 'analyst');
+-- Demo users are no longer created here (they shipped with a published password).
+-- The backend creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD on first start.
 
 -- ===========================================
 -- SEED DATA - Demo Vessels

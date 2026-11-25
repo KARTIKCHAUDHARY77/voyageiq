@@ -14,6 +14,7 @@ import csv
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..security import csv_safe
 
 from app.extensions import db
 from app.models import Voyage, Vessel, NoonReport, Claim, FuelAnalytic
@@ -528,7 +529,13 @@ def _generate_excel(voyage, vessel, reports, claims, fuel_analytics) -> bytes:
 
 def _generate_csv(voyage, vessel, reports, claims, fuel_analytics) -> bytes:
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    _w = csv.writer(buf)
+
+    class _SafeWriter:
+        def writerow(self, row):
+            _w.writerow([csv_safe(c) for c in row])
+
+    writer = _SafeWriter()
 
     # Header metadata
     writer.writerow(["VoyageIQ Voyage Report"])
@@ -597,8 +604,8 @@ def generate_report(voyage_id):
         if fmt == 'pdf':
             try:
                 data = _generate_pdf(voyage, vessel, reports, claims, fuel_analytics)
-            except ImportError as exc:
-                return jsonify({'success': False, 'error': str(exc)}), 500
+            except ImportError:
+                return jsonify({'success': False, 'error': 'Report generation unavailable'}), 500
             return send_file(
                 io.BytesIO(data),
                 mimetype='application/pdf',
@@ -609,8 +616,8 @@ def generate_report(voyage_id):
         elif fmt == 'excel':
             try:
                 data = _generate_excel(voyage, vessel, reports, claims, fuel_analytics)
-            except ImportError as exc:
-                return jsonify({'success': False, 'error': str(exc)}), 500
+            except ImportError:
+                return jsonify({'success': False, 'error': 'Report generation unavailable'}), 500
             return send_file(
                 io.BytesIO(data),
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

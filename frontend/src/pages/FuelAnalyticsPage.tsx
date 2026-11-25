@@ -1,208 +1,225 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Bar, Line } from 'react-chartjs-2'
+import '../design/registerCharts'
+import { baseChartOptions, chartColors, referenceLine } from '../design/chartTheme'
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement,
-  LineElement, ArcElement, Title, Tooltip, Legend, Filler
-} from 'chart.js'
-import { Bar, Line, Doughnut } from 'react-chartjs-2'
-import { Fuel, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle, Info, CheckCircle } from 'lucide-react'
+  Button, DataTable, EmptyState, ErrorState, Field, PageHeader, Panel, Select, Skeleton, Stat,
+} from '../components/kit'
+import type { Column } from '../components/kit'
 import { analyticsAPI, vesselsAPI } from '../services/api'
-import { Vessel } from '../types'
+import { useApi } from '../lib/useApi'
+import { num, shortDate, usd } from '../lib/format'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler)
+const PERIODS = [
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
+  { value: 180, label: 'Last 180 days' },
+]
 
-const CHART_OPTS = {
-  responsive: true, maintainAspectRatio: false,
-  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } }, tooltip: { backgroundColor: '#0A1F3A', titleColor: '#e2e8f0', bodyColor: '#94a3b8' } },
-  scales: { x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } } },
+const BAND_ORDER = ['calm_0_3', 'moderate_4_5', 'rough_6_7', 'severe_8_plus']
+
+interface BandRow {
+  key: string
+  label: string
+  report_count: number
+  avg_speed_loss_kn: number | null
+  avg_excess_consumption_mt: number | null
+}
+
+function ChartBox({ label, children }: { label: string; children: React.ReactElement }) {
+  return <div className="relative w-full min-w-0 h-60">{React.cloneElement(children, { role: 'img', 'aria-label': label } as object)}</div>
 }
 
 export default function FuelAnalyticsPage() {
-  const [vessels, setVessels] = useState<Vessel[]>([])
-  const [selectedVessel, setSelectedVessel] = useState<string>('')
-  const [fuelData, setFuelData] = useState<any>(null)
-  const [weatherData, setWeatherData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+  const [vesselId, setVesselId] = useState('')
+  const [days, setDays] = useState(30)
 
+  const vessels = useApi<any[]>(() => vesselsAPI.list().then(r => r.data?.vessels ?? r.data ?? []), [])
+
+  // Start on a vessel that has reports, so the first view is not an empty chart.
   useEffect(() => {
-    vesselsAPI.list().then(res => {
-      const vs = res.data.vessels || res.data
-      setVessels(vs)
-      if (vs.length > 0) setSelectedVessel(vs[0].id)
-    }).catch(console.error)
-  }, [])
+    if (vesselId || !vessels.data?.length) return
+    const withData = vessels.data.find(v => v.health_score != null)
+    setVesselId((withData ?? vessels.data[0]).id)
+  }, [vessels.data, vesselId])
 
-  const loadFuelData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [fRes, wRes] = await Promise.allSettled([
-        analyticsAPI.fuel(selectedVessel || undefined),
-        analyticsAPI.weatherImpact(),
-      ])
-      if (fRes.status === 'fulfilled') setFuelData(fRes.value.data)
-      if (wRes.status === 'fulfilled') setWeatherData(wRes.value.data)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
-  }, [selectedVessel])
+  const fuel = useApi<any>(() => (vesselId ? analyticsAPI.fuel(vesselId, days).then(r => r.data) : Promise.resolve(null)), [vesselId, days])
+  const weather = useApi<any>(() => (vesselId ? analyticsAPI.weatherImpact(vesselId, days).then(r => r.data) : Promise.resolve(null)), [vesselId, days])
 
-  useEffect(() => { if (selectedVessel) loadFuelData() }, [selectedVessel, loadFuelData])
+  const f = fuel.data
+  const daily: any[] = f?.daily_consumption ?? []
+  const hasData = daily.length > 0
+  const loading = fuel.loading || vessels.loading
+  const warranted = f?.warranted
+  const warrantedNmPerMt = warranted?.speed && warranted?.consumption ? (warranted.speed * 24) / warranted.consumption : null
 
-  const daily = fuelData?.daily_consumption?.slice(-20) || []
-  const labels = daily.map((d: any) => { const dt = new Date(d.date); return `${dt.getMonth() + 1}/${dt.getDate()}` })
+  const efficiencyDelta = f?.avg_efficiency != null && warrantedNmPerMt
+    ? ((f.avg_efficiency - warrantedNmPerMt) / warrantedNmPerMt) * 100
+    : null
 
-  const stackedBarData = {
-    labels,
-    datasets: [
-      { label: 'ME', data: daily.map((d: any) => d.me || 0), backgroundColor: 'rgba(20,184,166,0.75)', borderRadius: 2 },
-      { label: 'AE', data: daily.map((d: any) => d.ae || 0), backgroundColor: 'rgba(14,165,233,0.65)', borderRadius: 2 },
-      { label: 'Boiler', data: daily.map((d: any) => d.boiler || 0), backgroundColor: 'rgba(139,92,246,0.5)', borderRadius: 2 },
-    ],
-  }
+  const charts = useMemo(() => {
+    const c = chartColors()
+    const labels = daily.map(d => shortDate(d.date))
+    const base = (opts?: Parameters<typeof baseChartOptions>[0]) => baseChartOptions(opts) as any
+    return {
+      consumption: {
+        data: {
+          labels,
+          datasets: [
+            { label: 'Main engine', data: daily.map(d => d.me), backgroundColor: c.accent, borderRadius: 2, stack: 's' },
+            { label: 'Auxiliary', data: daily.map(d => d.ae), backgroundColor: c.depth, borderRadius: 2, stack: 's' },
+            { label: 'Boiler', data: daily.map(d => d.boiler), backgroundColor: c.muted, borderRadius: 2, stack: 's' },
+          ],
+        },
+        options: base({ unit: 'MT', stacked: true }),
+      },
+      efficiency: {
+        data: {
+          labels,
+          datasets: [
+            { label: 'Actual', data: daily.map(d => (d.total > 0 && d.distance > 0 ? d.distance / d.total : null)), borderColor: c.accent, backgroundColor: c.accentFill, borderWidth: 2, pointRadius: 2, tension: 0.25, spanGaps: true },
+            ...(warrantedNmPerMt ? [referenceLine('Warranted', warrantedNmPerMt, labels.length)] : []),
+          ],
+        },
+        options: base({ unit: 'nm/MT' }),
+      },
+      rob: {
+        data: {
+          labels,
+          datasets: [
+            { label: 'LSFO', data: daily.map(d => d.rob_lsfo), borderColor: c.accent, backgroundColor: c.accentFill, borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true },
+            { label: 'MGO', data: daily.map(d => d.rob_mgo), borderColor: c.depth, backgroundColor: c.depthFill, borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true },
+          ],
+        },
+        options: base({ unit: 'MT' }),
+      },
+    }
+  }, [daily, warrantedNmPerMt])
 
-  const efficiencyData = {
-    labels,
-    datasets: [
-      { label: 'Actual Efficiency', data: daily.map((d: any) => d.total > 0 ? ((d.me || 0) * 24 / d.total) : 0), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.1)', tension: 0.4, fill: true },
-      { label: 'Benchmark', data: daily.map(() => 8.5), borderColor: '#F59E0B', borderDash: [5, 5], tension: 0 },
-    ],
-  }
+  const bands: BandRow[] = BAND_ORDER
+    .map(key => ({ key, ...(weather.data?.weather_bands?.[key] ?? {}) }))
+    .filter((r: any) => r.report_count > 0)
 
-  const fuelTypeData = {
-    labels: ['LSFO', 'MGO'],
-    datasets: [{ data: [78, 22], backgroundColor: ['rgba(20,184,166,0.8)', 'rgba(14,165,233,0.7)'], borderWidth: 0 }],
-  }
-
-  const robData = {
-    labels,
-    datasets: [
-      { label: 'ROB LSFO', data: daily.map((_: any, i: number) => Math.max(200, 1200 - i * 40 + Math.random() * 20)), borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,0.15)', fill: true, tension: 0.4 },
-      { label: 'ROB MGO', data: daily.map((_: any, i: number) => Math.max(30, 150 - i * 5 + Math.random() * 5)), borderColor: '#0EA5E9', backgroundColor: 'rgba(14,165,233,0.1)', fill: true, tension: 0.4 },
-    ],
-  }
-
-  const insights = fuelData?.insights || [
-    'Fuel consumption increased by 8.3% due to Beaufort 5 conditions in days 12-15.',
-    'ME efficiency is within 2% of warranted values. Good performance.',
-    'AE consumption spike detected on day 8. Recommend auxiliary engine audit.',
-    'ROB LSFO critically low. Arrange bunkering at next port call.',
+  const bandColumns: Column<BandRow>[] = [
+    { key: 'label', header: 'Conditions' },
+    { key: 'report_count', header: 'Report days', numeric: true },
+    { key: 'speed', header: 'Speed vs warranted (kn)', numeric: true, render: r => (r.avg_speed_loss_kn != null ? `${r.avg_speed_loss_kn > 0 ? '−' : '+'}${Math.abs(r.avg_speed_loss_kn).toFixed(2)}` : '–') },
+    { key: 'burn', header: 'ME burn vs warranted (MT/day)', numeric: true, render: r => (r.avg_excess_consumption_mt != null ? `${r.avg_excess_consumption_mt > 0 ? '+' : ''}${r.avg_excess_consumption_mt.toFixed(1)}` : '–') },
   ]
 
-  const insightIcon = (i: number) => {
-    if (i === 0) return <AlertCircle size={14} className="text-orange-400 shrink-0 mt-0.5" />
-    if (i === 1) return <CheckCircle size={14} className="text-green-400 shrink-0 mt-0.5" />
-    return <Info size={14} className="text-ocean-400 shrink-0 mt-0.5" />
-  }
-
-  const weatherRows = weatherData?.by_beaufort || [
-    { beaufort: '0-3 (Calm)', days: 8, avg_speed: 14.2, excess_cons: 0.0, impact: 0 },
-    { beaufort: '4-5 (Moderate)', days: 9, avg_speed: 13.6, excess_cons: 1.8, impact: 6720 },
-    { beaufort: '6+ (Rough)', days: 3, avg_speed: 12.1, excess_cons: 4.2, impact: 7812 },
-  ]
+  const split = f?.fuel_type_split
+  const splitTotal = split ? split.lsfo + split.mgo : 0
+  const insights: string[] = [...(f?.insights ?? []), ...(weather.data?.insights ?? [])]
+  const vesselName = vessels.data?.find(v => v.id === vesselId)?.name
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white">Fuel Analytics Center</h1>
-          <p className="text-navy-400 text-sm mt-1">Advanced consumption analysis & efficiency tracking</p>
-        </div>
-        <select value={selectedVessel} onChange={e => setSelectedVessel(e.target.value)}
-          className="bg-navy-800 border border-navy-600 text-white rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-teal-500">
-          {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-        </select>
+    <>
+      <PageHeader
+        title="Fuel analytics"
+        description="Consumption and efficiency from noon reports, measured against the vessel's warranted figures."
+      />
+
+      <div className="flex flex-wrap gap-4 mb-6">
+        <Field label="Vessel" className="w-full sm:w-64">
+          {a11y => (
+            <Select {...a11y} value={vesselId} onChange={e => setVesselId(e.target.value)} disabled={!vessels.data?.length}>
+              {(vessels.data ?? []).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </Select>
+          )}
+        </Field>
+        <Field label="Period" className="w-full sm:w-48">
+          {a11y => (
+            <Select {...a11y} value={days} onChange={e => setDays(Number(e.target.value))}>
+              {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </Select>
+          )}
+        </Field>
       </div>
 
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Consumption', value: fuelData?.total_consumption ? `${fuelData.total_consumption.toFixed(0)} MT` : '—', icon: Fuel, color: 'text-amber-400' },
-          { label: 'Daily Average', value: fuelData?.daily_avg ? `${fuelData.daily_avg.toFixed(1)} MT/d` : '—', icon: Activity, color: 'text-teal-400' },
-          { label: 'Total Cost', value: fuelData?.total_cost_usd ? `$${(fuelData.total_cost_usd / 1000).toFixed(0)}K` : '—', icon: DollarSign, color: 'text-green-400' },
-          { label: 'Avg Efficiency', value: fuelData?.avg_efficiency ? `${fuelData.avg_efficiency.toFixed(2)} nm/MT` : '—', icon: TrendingUp, color: 'text-ocean-400' },
-        ].map(({ label, value, icon: Icon, color }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-            className="glass-card p-5 rounded-2xl">
-            <div className={`${color} mb-2`}><Icon size={18} /></div>
-            <p className="text-xl font-bold font-display text-white">{value}</p>
-            <p className="text-xs text-navy-400 mt-1">{label}</p>
-          </motion.div>
-        ))}
-      </div>
+      {fuel.error ? (
+        <Panel><ErrorState title="Could not load fuel data" onRetry={fuel.reload} /></Panel>
+      ) : !loading && !hasData ? (
+        <Panel>
+          <EmptyState
+            title={`No noon reports for ${vesselName ?? 'this vessel'} in this period`}
+            action={<Button variant="primary" onClick={() => navigate('/noon-reports')}>Add noon reports</Button>}
+          >
+            Pick another vessel or a longer period, or add reports to see consumption here.
+          </EmptyState>
+        </Panel>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Stat loading={loading} label="Fuel burned" value={num(f?.total_consumed_mt, 0)} unit="MT" />
+            <Stat loading={loading} label="Average per day" value={num(hasData ? f.total_consumed_mt / daily.length : null, 1)} unit="MT/day" />
+            <Stat loading={loading} label="Cost" value={usd(f?.total_cost_usd)} unit={f ? `at $${f.bunker_price_per_mt}/MT` : undefined} />
+            <Stat
+              loading={loading}
+              label="Efficiency"
+              value={num(f?.avg_efficiency, 2)}
+              unit="nm/MT"
+              delta={efficiencyDelta != null ? { value: `${efficiencyDelta > 0 ? '+' : ''}${efficiencyDelta.toFixed(1)}%`, tone: efficiencyDelta >= 0 ? 'good' : 'bad', label: `vs ${warrantedNmPerMt!.toFixed(2)} warranted` } : undefined}
+            />
+          </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-4">Daily Fuel Consumption (ME / AE / Boiler)</h3>
-          <div style={{ height: 220 }}><Bar data={stackedBarData} options={{ ...CHART_OPTS as any, scales: { x: CHART_OPTS.scales.x, y: { ...CHART_OPTS.scales.y, stacked: true } } }} /></div>
-        </motion.div>
+          <div className="grid lg:grid-cols-2 gap-6 mt-6">
+            <Panel title="Daily consumption">
+              {loading ? <Skeleton className="h-60" /> : (
+                <ChartBox label="Stacked bar chart of daily fuel burned by main engine, auxiliary and boiler">
+                  <Bar data={charts.consumption.data} options={charts.consumption.options} />
+                </ChartBox>
+              )}
+            </Panel>
+            <Panel title="Efficiency against warranted">
+              {loading ? <Skeleton className="h-60" /> : (
+                <ChartBox label="Line chart of daily fuel efficiency in nautical miles per tonne against the warranted value">
+                  <Line data={charts.efficiency.data} options={charts.efficiency.options} />
+                </ChartBox>
+              )}
+            </Panel>
+            <Panel title="Remaining on board">
+              {loading ? <Skeleton className="h-60" /> : (
+                <ChartBox label="Line chart of remaining on board LSFO and MGO in tonnes">
+                  <Line data={charts.rob.data} options={charts.rob.options} />
+                </ChartBox>
+              )}
+            </Panel>
+            <Panel title="Fuel type">
+              {loading || !split ? <Skeleton className="h-24" /> : splitTotal === 0 ? (
+                <p className="text-body text-fg-muted">No fuel-type breakdown was reported.</p>
+              ) : (
+                <>
+                  <div className="flex h-2.5 rounded-full overflow-hidden bg-fg/10" role="img" aria-label={`LSFO ${num(split.lsfo, 0)} tonnes, MGO ${num(split.mgo, 0)} tonnes`}>
+                    <div className="bg-accent" style={{ width: `${(split.lsfo / splitTotal) * 100}%` }} />
+                    <div className="bg-signal-depth" style={{ width: `${(split.mgo / splitTotal) * 100}%` }} />
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-4">
+                    <div><dt className="flex items-center gap-1.5 text-label text-fg-muted"><span className="w-2 h-2 rounded-full bg-accent" aria-hidden />LSFO</dt><dd className="font-mono text-[22px] tabular-nums text-fg">{num(split.lsfo, 0)} <span className="text-label text-fg-subtle">MT</span></dd></div>
+                    <div><dt className="flex items-center gap-1.5 text-label text-fg-muted"><span className="w-2 h-2 rounded-full bg-signal-depth" aria-hidden />MGO</dt><dd className="font-mono text-[22px] tabular-nums text-fg">{num(split.mgo, 0)} <span className="text-label text-fg-subtle">MT</span></dd></div>
+                  </dl>
+                </>
+              )}
+            </Panel>
+          </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-4">ROB Trend (LSFO & MGO)</h3>
-          <div style={{ height: 220 }}><Line data={robData} options={CHART_OPTS as any} /></div>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-4">Fuel Efficiency vs Benchmark (nm/MT)</h3>
-          <div style={{ height: 220 }}><Line data={efficiencyData} options={CHART_OPTS as any} /></div>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-4">Fuel Type Split (LSFO vs MGO)</h3>
-          <div style={{ height: 220 }}><Doughnut data={fuelTypeData} options={{ ...CHART_OPTS as any, cutout: '60%', scales: undefined } as any} /></div>
-        </motion.div>
-      </div>
-
-      {/* AI Insights */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card p-6 rounded-2xl">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-          <Activity size={14} className="text-teal-400" /> AI-Generated Fuel Insights
-        </h3>
-        <div className="space-y-3">
-          {insights.map((insight: string, i: number) => (
-            <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 + i * 0.1 }}
-              className="flex items-start gap-3 p-3 rounded-xl bg-navy-800/50">
-              {insightIcon(i)}
-              <p className="text-sm text-navy-300">{insight}</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Weather Impact Table */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card p-6 rounded-2xl">
-        <h3 className="text-sm font-semibold text-white mb-4">Weather Impact Analysis</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Beaufort Conditions', 'Days', 'Avg Speed (kts)', 'Excess Consumption (MT/d)', 'Commercial Impact ($)'].map(h => (
-                  <th key={h} className="text-left py-2 px-3 text-xs text-navy-500 font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {weatherRows.map((row: any, i: number) => (
-                <tr key={i} className="border-b border-white/3 hover:bg-white/2">
-                  <td className="py-3 px-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${i === 0 ? 'bg-green-500/15 text-green-400' : i === 1 ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
-                      {row.beaufort}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-navy-300">{row.days}</td>
-                  <td className="py-3 px-3 text-white font-medium">{row.avg_speed?.toFixed(1)}</td>
-                  <td className={`py-3 px-3 font-medium ${row.excess_cons > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    {row.excess_cons > 0 ? '+' : ''}{row.excess_cons?.toFixed(1)}
-                  </td>
-                  <td className="py-3 px-3">
-                    {row.impact > 0 ? <span className="text-red-400 font-bold">${row.impact.toLocaleString()}</span> : <span className="text-green-400">No impact</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
-    </div>
+          <div className="grid gap-6 mt-6">
+            {insights.length > 0 && (
+              <Panel title="Findings">
+                <ul className="grid md:grid-cols-2 gap-x-8 gap-y-3">
+                  {insights.map((text, i) => <li key={i} className="text-body text-fg-muted border-l-2 border-line-strong pl-3">{text}</li>)}
+                </ul>
+              </Panel>
+            )}
+            <Panel title="Weather and performance" flush>
+              {weather.error ? <ErrorState title="Could not load weather data" onRetry={weather.reload} /> : (
+                <DataTable caption="Speed and fuel against warranted values by Beaufort band" columns={bandColumns} rows={bands} rowKey={r => r.key} empty="No reports with a recorded wind force." />
+              )}
+            </Panel>
+          </div>
+        </>
+      )}
+    </>
   )
 }

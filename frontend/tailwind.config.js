@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Wrap every hover: variant in @media (hover: hover) so touch screens never get stuck hover states.
+  future: { hoverOnlyWhenSupported: true },
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,18 +9,44 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Maritime Navy Palette
+        // Design tokens (see src/index.css). Prefer these in new code.
+        base: 'rgb(var(--c-base) / <alpha-value>)',
+        surface: {
+          1: 'rgb(var(--c-surface-1) / <alpha-value>)',
+          2: 'rgb(var(--c-surface-2) / <alpha-value>)',
+        },
+        line: {
+          DEFAULT: 'rgb(var(--c-line) / 0.14)',
+          strong: 'rgb(var(--c-line) / 0.26)',
+        },
+        fg: {
+          DEFAULT: 'rgb(var(--c-fg) / <alpha-value>)',
+          muted: 'rgb(var(--c-fg-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--c-fg-subtle) / <alpha-value>)',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
+          strong: 'rgb(var(--c-accent-strong) / <alpha-value>)',
+        },
+        signal: {
+          port: 'rgb(var(--c-port) / <alpha-value>)',
+          starboard: 'rgb(var(--c-starboard) / <alpha-value>)',
+          caution: 'rgb(var(--c-caution) / <alpha-value>)',
+          depth: 'rgb(var(--c-depth) / <alpha-value>)',
+        },
+        // Legacy palette, kept until each page is migrated
+        // Maritime Navy Palette (600-950 are surfaces; 100-500 are text tones)
         navy: {
           950: '#020B18',
           900: '#040F1F',
           800: '#071628',
           700: '#0A1F3A',
           600: '#0E2847',
-          500: '#122F52',
-          400: '#1A3F6B',
-          300: '#234F84',
-          200: '#2B5F9D',
-          100: '#3C7AB8',
+          500: '#6a7f9c',
+          400: '#7d92ae',
+          300: '#9aacc4',
+          200: '#b5c3d7',
+          100: '#d0d9e6',
         },
         ocean: {
           900: '#032B41',
@@ -61,10 +89,27 @@ export default {
           300: '#6EE7B7',
         }
       },
+      // Six-step type scale. Body copy is never smaller than 13px; 11-12px is for metadata.
+      fontSize: {
+        meta: ['11px', { lineHeight: '16px', letterSpacing: '0.04em' }],
+        label: ['12px', { lineHeight: '16px' }],
+        body: ['13px', { lineHeight: '20px' }],
+        lead: ['15px', { lineHeight: '24px' }],
+        title: ['20px', { lineHeight: '28px', letterSpacing: '-0.015em' }],
+        display: ['28px', { lineHeight: '34px', letterSpacing: '-0.02em' }],
+      },
+      borderRadius: {
+        ctl: 'var(--radius-ctl)',
+        panel: 'var(--radius-panel)',
+      },
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        'in-out-strong': 'cubic-bezier(0.77, 0, 0.175, 1)',
+      },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['IBM Plex Sans', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['IBM Plex Sans', 'Inter', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'JetBrains Mono', 'monospace'],
       },
       backgroundImage: {
         'maritime-gradient': 'linear-gradient(135deg, #020B18 0%, #040F1F 30%, #071628 60%, #0A1F3A 100%)',
@@ -74,22 +119,22 @@ export default {
         'card-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
       },
       boxShadow: {
-        'glow-teal': '0 0 30px rgba(20, 184, 166, 0.3)',
-        'glow-ocean': '0 0 30px rgba(14, 165, 233, 0.3)',
-        'glow-danger': '0 0 20px rgba(239, 68, 68, 0.4)',
+        'glow-teal': 'none',
+        'glow-ocean': 'none',
+        'glow-danger': 'none',
         'card': '0 4px 24px rgba(0, 0, 0, 0.4)',
         'card-hover': '0 8px 40px rgba(0, 0, 0, 0.6)',
         'glass': '0 8px 32px rgba(0, 0, 0, 0.3)',
       },
       animation: {
-        'float': 'float 6s ease-in-out infinite',
+        'float': 'none',
         'pulse-slow': 'pulse 3s ease-in-out infinite',
         'shimmer': 'shimmer 2s linear infinite',
         'spin-slow': 'spin 8s linear infinite',
-        'wave': 'wave 3s ease-in-out infinite',
-        'slide-up': 'slideUp 0.5s ease-out',
-        'fade-in': 'fadeIn 0.4s ease-out',
-        'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+        'wave': 'none',
+        'slide-up': 'slideUp 0.25s cubic-bezier(0.23, 1, 0.32, 1)',
+        'fade-in': 'fadeIn 0.2s cubic-bezier(0.23, 1, 0.32, 1)',
+        'glow-pulse': 'none',
       },
       keyframes: {
         float: {
@@ -105,7 +150,7 @@ export default {
           '50%': { transform: 'rotate(3deg)' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         fadeIn: {

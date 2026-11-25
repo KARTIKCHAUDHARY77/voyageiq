@@ -17,12 +17,44 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Renew an expired access token once, then retry. Concurrent 401s share one refresh call.
+let refreshing: Promise<string> | null = null
+
+async function renewAccessToken(): Promise<string> {
+  const refresh = localStorage.getItem('voyageiq_refresh')
+  if (!refresh) throw new Error('no refresh token')
+  const res = await axios.post(
+    `${API_URL}/api/auth/refresh`,
+    {},
+    { headers: { Authorization: `Bearer ${refresh}` }, timeout: 15000 },
+  )
+  const token = res.data.access_token as string
+  localStorage.setItem('voyageiq_token', token)
+  return token
+}
+
+function endSession() {
+  localStorage.removeItem('voyageiq_token')
+  localStorage.removeItem('voyageiq_refresh')
+  localStorage.removeItem('voyageiq-auth')
+  if (window.location.pathname !== '/login') window.location.href = '/login'
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('voyageiq_token')
-      window.location.href = '/login'
+  async (error) => {
+    const original = error.config
+    const isAuthCall = original?.url?.includes('/api/auth/login') || original?.url?.includes('/api/auth/refresh')
+    if (error.response?.status === 401 && original && !original._retried && !isAuthCall) {
+      original._retried = true
+      try {
+        refreshing = refreshing ?? renewAccessToken().finally(() => { refreshing = null })
+        const token = await refreshing
+        original.headers.Authorization = `Bearer ${token}`
+        return api(original)
+      } catch {
+        endSession()
+      }
     }
     return Promise.reject(error)
   }
@@ -32,6 +64,7 @@ export const authAPI = {
   login: (email: string, password: string) => api.post('/api/auth/login', { email, password }),
   register: (data: object) => api.post('/api/auth/register', data),
   me: () => api.get('/api/auth/me'),
+  logout: (refreshToken?: string | null) => api.post('/api/auth/logout', { refresh_token: refreshToken }),
 }
 
 export const vesselsAPI = {
@@ -56,9 +89,9 @@ export const voyagesAPI = {
 
 export const analyticsAPI = {
   dashboard: () => api.get('/api/analytics/dashboard'),
-  fuel: (vesselId?: string) => api.get('/api/analytics/fuel', { params: { vessel_id: vesselId } }),
+  fuel: (vesselId?: string, days?: number) => api.get('/api/analytics/fuel', { params: { vessel_id: vesselId, days } }),
   performance: (vesselId?: string) => api.get('/api/analytics/performance', { params: { vessel_id: vesselId } }),
-  weatherImpact: () => api.get('/api/analytics/weather-impact'),
+  weatherImpact: (vesselId?: string, days?: number) => api.get('/api/analytics/weather-impact', { params: { vessel_id: vesselId, days } }),
 }
 
 export const claimsAPI = {
@@ -67,7 +100,7 @@ export const claimsAPI = {
   create: (data: object) => api.post('/api/claims', data),
   updateStatus: (id: string, status: string, notes?: string) =>
     api.put(`/api/claims/${id}/status`, { status, notes }),
-  detect: (voyageId: string) => api.get(`/api/claims/detect/${voyageId}`),
+  detect: (voyageId: string) => api.post(`/api/claims/detect/${voyageId}`),
 }
 
 export const optimizationAPI = {

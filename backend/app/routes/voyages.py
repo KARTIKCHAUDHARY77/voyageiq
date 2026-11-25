@@ -57,7 +57,7 @@ def list_voyages():
         return jsonify({'voyages': voyages_data, 'total': pagination.total,
                         'page': pagination.page, 'pages': pagination.pages})
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve voyages', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve voyages'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ def get_voyage(voyage_id):
         data['report_count'] = NoonReport.query.filter_by(voyage_id=voyage_id).count()
         return jsonify(data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def create_voyage():
         return jsonify(vd), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to create voyage', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create voyage'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ def update_voyage(voyage_id):
         return jsonify(voyage.to_dict())
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +172,45 @@ def list_noon_reports(voyage_id):
         return jsonify({'reports': [r.to_dict() for r in pagination.items],
                         'total': pagination.total})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
 # Add noon report — maps ALL field names the frontend sends to actual model columns
 # ---------------------------------------------------------------------------
+
+NOON_RANGES = {
+    'latitude': (-90, 90), 'longitude': (-180, 180), 'speed_over_ground': (0, 40),
+    'speed_through_water': (0, 40), 'distance_noon_to_noon': (0, 1000), 'rpm': (0, 300),
+    'course': (0, 360), 'wind_force_bft': (0, 12), 'wind_speed_knots': (0, 200),
+    'wave_height': (0, 30), 'swell_height': (0, 30),
+    'me_lsfo': (0, 500), 'me_mgo': (0, 500), 'ae_lsfo': (0, 100), 'ae_mgo': (0, 100),
+    'boiler_lsfo': (0, 100), 'boiler_mgo': (0, 100), 'rob_lsfo': (0, 100000), 'rob_mgo': (0, 100000),
+}
+
+
+def _validate_noon(data):
+    """Return {field: message} for anything missing or out of a physically sensible range."""
+    errors = {}
+    if not data.get('report_date'):
+        errors['report_date'] = 'Report date is required'
+    for key in ('latitude', 'longitude'):
+        if data.get(key) in (None, ''):
+            errors[key] = 'Position is required'
+    for key, (lo, hi) in NOON_RANGES.items():
+        value = data.get(key)
+        if value in (None, ''):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            errors[key] = 'Must be a number'
+            continue
+        if not (lo <= number <= hi):
+            errors[key] = f'Must be between {lo} and {hi}'
+    return errors
+
+
 @voyages_bp.route('/<voyage_id>/noon-reports', methods=['POST'])
 @jwt_required()
 def add_noon_report(voyage_id):
@@ -186,7 +219,10 @@ def add_noon_report(voyage_id):
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
 
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
+        errors = _validate_noon(data)
+        if errors:
+            return jsonify({'error': 'Please fix the highlighted fields', 'fields': errors}), 400
 
         def parse_date(v):
             if not v: return None
@@ -197,6 +233,15 @@ def add_noon_report(voyage_id):
             if not v: return None
             try: return datetime.strptime(str(v)[:8], '%H:%M:%S').time()
             except: return None
+
+        report_day = parse_date(data.get('report_date'))
+        if report_day is None:
+            return jsonify({'error': 'Please fix the highlighted fields', 'fields': {'report_date': 'Use the format YYYY-MM-DD'}}), 400
+        duplicate = NoonReport.query.filter_by(
+            voyage_id=voyage_id, report_date=report_day, report_type=data.get('report_type', 'noon')).first()
+        if duplicate:
+            return jsonify({'error': 'A report of this type already exists for that date',
+                            'fields': {'report_date': 'Already reported for this voyage'}}), 409
 
         report = NoonReport(
             id=str(uuid.uuid4()),
@@ -255,7 +300,7 @@ def add_noon_report(voyage_id):
         return jsonify(report.to_dict()), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to add noon report', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to add noon report'}), 500
 
 
 def _update_voyage_stats(voyage):
@@ -289,13 +334,10 @@ def get_voyage_performance(voyage_id):
                    .order_by(NoonReport.report_date.asc()).all())
 
         if not reports:
-            ws = float(voyage.charter_party_speed or 14.0)
-            wc = float(voyage.charter_party_consumption or 28.5)
             return jsonify({
                 'voyage_id': voyage_id, 'voyage_number': voyage.voyage_number,
                 'vessel_name': voyage.vessel.name if voyage.vessel else None,
-                'summary': {'message': 'No noon reports yet. Add reports to see performance.'},
-                'daily': [], 'weekly': [],
+                'summary': None, 'daily': [],
             })
 
         daily_map = defaultdict(lambda: {'speeds':[], 'fuels':[], 'distances':[], 'bft':[]})
@@ -323,17 +365,21 @@ def get_voyage_performance(voyage_id):
         all_fuels  = [float(r.total_fuel_consumption) for r in reports if r.total_fuel_consumption]
         all_dists  = [float(r.distance_noon_to_noon) for r in reports if r.distance_noon_to_noon]
         td = sum(all_dists); tf = sum(all_fuels)
-        ws = float(voyage.charter_party_speed or 14.0)
-        wc = float(voyage.charter_party_consumption or 28.5)
-        avg_s = round(sum(all_speeds)/len(all_speeds), 2) if all_speeds else ws
-        avg_f = round(sum(all_fuels)/len(all_fuels), 2) if all_fuels else wc
+        vessel = voyage.vessel
+        ws = voyage.charter_party_speed or (vessel.warranted_speed if vessel else None)
+        wc = voyage.charter_party_consumption or (vessel.warranted_consumption if vessel else None)
+        ws = float(ws) if ws else None
+        wc = float(wc) if wc else None
+        avg_s = round(sum(all_speeds)/len(all_speeds), 2) if all_speeds else None
+        avg_f = round(sum(all_fuels)/len(all_fuels), 2) if all_fuels else None
 
         summary = {
             'total_distance_nm': round(td, 1), 'total_fuel_mt': round(tf, 1),
-            'avg_speed': avg_s, 'cp_speed': ws, 'speed_variance': round(avg_s - ws, 2),
+            'avg_speed': avg_s, 'cp_speed': ws,
+            'speed_variance': round(avg_s - ws, 2) if avg_s is not None and ws else None,
             'avg_daily_fuel': avg_f, 'cp_consumption': wc,
-            'consumption_variance_pct': round((avg_f - wc) / wc * 100, 1) if wc else 0,
-            'fuel_efficiency_nm_mt': round(td/tf, 2) if tf else 0,
+            'consumption_variance_pct': round((avg_f - wc) / wc * 100, 1) if avg_f is not None and wc else None,
+            'fuel_efficiency_nm_mt': round(td/tf, 2) if tf else None,
             'report_count': len(reports),
         }
 
@@ -341,7 +387,7 @@ def get_voyage_performance(voyage_id):
                         'vessel_name': voyage.vessel.name if voyage.vessel else None,
                         'summary': summary, 'daily': daily})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +405,6 @@ def get_voyage_claims(voyage_id):
                         'vessel_name': voyage.vessel.name if voyage.vessel else None,
                         'claims': [c.to_dict() for c in claims],
                         'total_claims': len(claims),
-                        'total_amount_usd': round(sum((c.estimated_impact_usd or 0) for c in claims), 2)})
+                        'total_amount_usd': round(sum(float(c.estimated_impact_usd or 0) for c in claims), 2)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
