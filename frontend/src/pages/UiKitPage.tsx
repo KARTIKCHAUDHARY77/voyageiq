@@ -66,7 +66,7 @@ export default function UiKitPage() {
 
         <Panel title="Speed against warranted" actions={<Badge tone="warn">Below warranted</Badge>}>
           <Tabs label="Measure" value={tab} onChange={setTab} items={[{ key: 'speed', label: 'Speed' }, { key: 'fuel', label: 'Fuel' }, { key: 'weather', label: 'Weather' }]} />
-          <div className="h-56 mt-4"><Line data={chart.data} options={chart.options} /></div>
+          <div className="h-56 mt-4"><Line role="img" aria-label="Line chart of speed over ground against the warranted speed" data={chart.data} options={chart.options} /></div>
         </Panel>
 
         <Panel title="Noon reports" flush>

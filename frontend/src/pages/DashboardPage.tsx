@@ -133,8 +133,7 @@ export default function DashboardPage() {
             <EmptyState title="No consumption data">Fuel figures appear once noon reports include main-engine consumption.</EmptyState>
           ) : (
             <>
-              <div className="relative w-full min-w-0 h-64" role="img" aria-label="Line chart of fleet fuel burned per day in metric tonnes">
-                <Line data={burn.data} options={burn.options as any} />
+              <div className="relative w-full min-w-0 h-64"><Line role="img" aria-label="Line chart of fleet fuel burned per day in metric tonnes" data={burn.data} options={burn.options as any} />
               </div>
               <p className="mt-3 text-label text-fg-subtle">Total across the vessels that filed a report each day, so it rises and falls with how many reported.</p>
             </>
@@ -150,17 +149,17 @@ export default function DashboardPage() {
                 <span className="font-mono text-[44px] leading-none font-medium tabular-nums text-fg">{num(k.fleet_health_score, 0)}</span>
                 <span className="text-label text-fg-subtle">out of 100</span>
               </p>
-              <dl className="mt-5 space-y-3">
+              <ul className="mt-5 space-y-3">
                 {COMPONENTS.map(([key, label]) => {
                   const v = k.health_breakdown?.[key]
                   return (
-                    <div key={key}>
-                      <div className="flex justify-between text-label"><dt className="text-fg-muted">{label}</dt><dd className="font-mono tabular-nums text-fg">{v != null ? `${num(v, 0)}%` : '–'}</dd></div>
+                    <li key={key}>
+                      <div className="flex justify-between text-label"><span className="text-fg-muted">{label}</span><span className="font-mono tabular-nums text-fg">{v != null ? `${num(v, 0)}%` : '–'}</span></div>
                       <div className="mt-1.5 h-1.5 rounded-full bg-fg/10" aria-hidden><div className="h-1.5 rounded-full bg-accent" style={{ width: `${v ?? 0}%` }} /></div>
-                    </div>
+                    </li>
                   )
                 })}
-              </dl>
+              </ul>
             </>
           )}
         </Panel>

@@ -84,17 +84,17 @@ export default function VesselDetailPage() {
           ) : (
             <>
               <div className="flex items-center gap-3">{healthBadge(health.total)}<span className="font-mono text-[26px] tabular-nums text-fg">{health.total}</span></div>
-              <dl className="mt-4 space-y-3">
+              <ul className="mt-4 space-y-3">
                 {HEALTH_PARTS.map(([key, label]) => {
                   const score = health.breakdown?.[key]
                   return (
-                    <div key={key}>
-                      <div className="flex justify-between text-label"><dt className="text-fg-muted">{label}</dt><dd className="font-mono tabular-nums text-fg">{score != null ? `${num((score / 25) * 100, 0)}%` : '–'}</dd></div>
+                    <li key={key}>
+                      <div className="flex justify-between text-label"><span className="text-fg-muted">{label}</span><span className="font-mono tabular-nums text-fg">{score != null ? `${num((score / 25) * 100, 0)}%` : '–'}</span></div>
                       <div className="mt-1.5 h-1.5 rounded-full bg-fg/10" aria-hidden><div className="h-1.5 rounded-full bg-accent" style={{ width: `${score != null ? (score / 25) * 100 : 0}%` }} /></div>
-                    </div>
+                    </li>
                   )
                 })}
-              </dl>
+              </ul>
               {health.recommendations?.length > 0 && (
                 <ul className="mt-5 space-y-2 border-t border-line pt-4">
                   {health.recommendations.map((r: string, i: number) => <li key={i} className="text-body text-fg-muted">{r}</li>)}

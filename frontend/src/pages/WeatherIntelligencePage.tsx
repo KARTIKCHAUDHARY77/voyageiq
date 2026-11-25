@@ -122,8 +122,7 @@ export default function WeatherIntelligencePage() {
 
           <div className="grid lg:grid-cols-2 gap-6 mt-6">
             <Panel title="Where the fuel goes" actions={wind?.severity ? <Badge tone={RISK_TONE[wind.severity] ?? 'neutral'}>{wind.severity}</Badge> : undefined}>
-              <div className="relative w-full min-w-0 h-56" role="img" aria-label="Bar chart of fuel burned per day by cause">
-                <Bar data={attrChart.data} options={attrChart.options} />
+              <div className="relative w-full min-w-0 h-56"><Bar role="img" aria-label="Bar chart of fuel burned per day by cause" data={attrChart.data} options={attrChart.options} />
               </div>
               <p className="mt-3 text-label text-fg-subtle">Total <span className="font-mono tabular-nums text-fg-muted">{num(attribution?.total_fuel_mt_day, 1)}</span> MT/day against a calm-water <span className="font-mono tabular-nums text-fg-muted">{s.baseFuel}</span>.</p>
             </Panel>
@@ -143,7 +142,7 @@ export default function WeatherIntelligencePage() {
           {stored.loading ? <Skeleton className="h-52" /> : histTotal === 0 ? (
             <EmptyState title="No wind data yet">Report days by Beaufort force appear once noon reports include a wind force.</EmptyState>
           ) : (
-            <div className="relative w-full min-w-0 h-52" role="img" aria-label="Bar chart of report days by Beaufort force"><Bar data={histChart.data} options={histChart.options} /></div>
+            <div className="relative w-full min-w-0 h-52"><Bar role="img" aria-label="Bar chart of report days by Beaufort force" data={histChart.data} options={histChart.options} /></div>
           )}
         </Panel>
       </div>

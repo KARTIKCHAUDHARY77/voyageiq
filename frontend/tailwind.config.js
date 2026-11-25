@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Wrap every hover: variant in @media (hover: hover) so touch screens never get stuck hover states.
+  future: { hoverOnlyWhenSupported: true },
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

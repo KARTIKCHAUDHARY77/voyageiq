@@ -25,7 +25,7 @@ interface DataTableProps<T> {
  */
 export function DataTable<T>({ columns, rows, rowKey, caption, empty, onRowClick }: DataTableProps<T>) {
   return (
-    <div className="overflow-auto max-h-[28rem]">
+    <div className="overflow-auto max-h-[28rem]" tabIndex={0} role="region" aria-label={caption}>
       <table className="w-full text-body border-separate border-spacing-0">
         <caption className="sr-only">{caption}</caption>
         <thead>

@@ -153,6 +153,10 @@ Reusable primitives live in `frontend/src/components/kit/` (Button, Field/Input/
 
 `frontend/src/layout/` holds the signed-in layout: a fixed sidebar with grouped navigation (Operate, Analyse, Plan) on large screens; a drawer and bottom bar below 1024px; a top bar with breadcrumb, a Ctrl/Cmd+K page switcher and the account menu. Navigation items are defined once in `layout/nav.ts`. Route changes are instant, focus moves to the page content, and there is a skip link. Each page's browser-tab title comes from the navigation, or from its `PageHeader`.
 
+## Accessibility
+
+Every signed-in route, the sign-in page, the command palette and the account menu were scanned with axe-core 4.10 (WCAG 2.0/2.1/2.2 A and AA plus best practices) and report no violations. Keyboard: skip link, visible focus rings, arrow-key tabs, focus-trapped drawer that closes on Esc, `aria-current` on navigation, labelled form fields with errors tied to their inputs, chart canvases and maps with text labels, tables that scroll inside a focusable region. Hover styles apply only on devices that can hover, and `prefers-reduced-motion` removes movement. Automated scans catch roughly a third of issues, so a screen-reader pass (VoiceOver, NVDA) is still worth doing before a public launch.
+
 ## Design notes
 
 The interface uses flat surfaces with hairline borders, one teal accent, IBM Plex type, and motion only where it explains a change (press feedback on buttons, short enter transitions). Decorative effects such as glass blur, glows, gradient text and looping animations were removed. Global styles live in `frontend/src/index.css` under "Refinement layer"; colour tokens are in `frontend/tailwind.config.js`.

@@ -77,10 +77,10 @@ export default function VoyageDetailPage() {
 
           <div className="grid lg:grid-cols-2 gap-6 mt-6">
             <Panel title="Speed against charter">
-              {perf.loading ? <Skeleton className="h-60" /> : <div className="relative w-full min-w-0 h-60" role="img" aria-label="Daily average speed against the charter-party speed"><Line data={charts.speed.data} options={charts.speed.options} /></div>}
+              {perf.loading ? <Skeleton className="h-60" /> : <div className="relative w-full min-w-0 h-60"><Line role="img" aria-label="Daily average speed against the charter-party speed" data={charts.speed.data} options={charts.speed.options} /></div>}
             </Panel>
             <Panel title="Daily fuel">
-              {perf.loading ? <Skeleton className="h-60" /> : <div className="relative w-full min-w-0 h-60" role="img" aria-label="Daily fuel burned against the charter-party burn"><Bar data={charts.fuel.data as any} options={charts.fuel.options} /></div>}
+              {perf.loading ? <Skeleton className="h-60" /> : <div className="relative w-full min-w-0 h-60"><Bar role="img" aria-label="Daily fuel burned against the charter-party burn" data={charts.fuel.data as any} options={charts.fuel.options} /></div>}
             </Panel>
           </div>
 

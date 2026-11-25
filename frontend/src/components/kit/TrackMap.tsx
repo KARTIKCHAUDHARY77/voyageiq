@@ -23,7 +23,7 @@ export function TrackMap({ points, label, className = 'h-72' }: { points: TrackP
   const bounds = path as LatLngBoundsExpression
 
   return (
-    <div className={`relative w-full min-w-0 overflow-hidden rounded-ctl border border-line track-map ${className}`} role="img" aria-label={label}>
+    <div className={`relative w-full min-w-0 overflow-hidden rounded-ctl border border-line track-map ${className}`} role="region" aria-label={label}>
       <MapContainer center={[last.lat, last.lon]} zoom={4} scrollWheelZoom={false} className="h-full w-full" attributionControl>
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"

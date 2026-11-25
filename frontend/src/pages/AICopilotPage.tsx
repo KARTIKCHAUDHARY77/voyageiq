@@ -115,7 +115,7 @@ export default function AICopilotPage() {
 
       <div className="bg-surface-1 border border-line rounded-panel flex flex-col lg:flex-row h-[calc(100dvh-14rem)] lg:h-[calc(100dvh-12rem)] min-h-[26rem] overflow-hidden">
         {/* Conversations: a sidebar on large screens, a menu above the chat on small ones. */}
-        <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-line">
+        <aside aria-label="Conversation history" className="hidden lg:flex w-64 shrink-0 flex-col border-r border-line">
           <div className="flex items-center justify-between px-3 h-11 border-b border-line">
             <h2 className="text-body font-semibold text-fg">History</h2>
             <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => openConversation('')}>New</Button>

@@ -21,7 +21,7 @@ export function Brand({ bare = false }: { bare?: boolean }) {
 /** Fixed rail on large screens. Below `lg` it is replaced by the drawer and bottom bar. */
 export function Sidebar() {
   return (
-    <aside className="hidden lg:flex fixed inset-y-0 left-0 w-60 flex-col bg-base border-r border-line z-30">
+    <aside aria-label="Sidebar" className="hidden lg:flex fixed inset-y-0 left-0 w-60 flex-col bg-base border-r border-line z-30">
       <Brand />
       <div className="flex-1 min-h-0 overflow-y-auto"><NavList /></div>
     </aside>

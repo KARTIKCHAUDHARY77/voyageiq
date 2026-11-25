@@ -27,8 +27,8 @@ interface BandRow {
   avg_excess_consumption_mt: number | null
 }
 
-function ChartBox({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="relative w-full min-w-0 h-60" role="img" aria-label={label}>{children}</div>
+function ChartBox({ label, children }: { label: string; children: React.ReactElement }) {
+  return <div className="relative w-full min-w-0 h-60">{React.cloneElement(children, { role: 'img', 'aria-label': label } as object)}</div>
 }
 
 export default function FuelAnalyticsPage() {
