@@ -282,7 +282,7 @@ export default function AICopilotPage() {
   const activeVessel = vessels.find(v => v.id === selectedVessel)
 
   return (
-    <div className="h-screen bg-navy-950 flex overflow-hidden">
+    <div className="h-[calc(100dvh-8.5rem)] lg:h-[calc(100dvh-7rem)] min-h-[28rem] bg-surface-1 border border-line rounded-panel flex overflow-hidden">
       {/* ── Sidebar: Conversations ── */}
       <AnimatePresence>
         {showSidebar && (

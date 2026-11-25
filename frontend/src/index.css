@@ -31,8 +31,8 @@ html {
 
 body {
   font-family: 'IBM Plex Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: var(--navy-950);
-  color: #e2e8f0;
+  background-color: rgb(var(--c-base, 6 14 26));
+  color: rgb(var(--c-fg, 230 237 246));
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

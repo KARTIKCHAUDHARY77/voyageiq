@@ -9,9 +9,7 @@ interface PageHeaderProps {
 /** Every page uses this, so titles look the same and the browser tab names the page. */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   useEffect(() => {
-    const previous = document.title
     document.title = `${title} · VoyageIQ`
-    return () => { document.title = previous }
   }, [title])
 
   return (

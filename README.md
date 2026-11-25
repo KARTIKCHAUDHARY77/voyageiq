@@ -149,6 +149,10 @@ All routes are under `/api` and need a bearer token except `/auth/login`, `/auth
 
 Reusable primitives live in `frontend/src/components/kit/` (Button, Field/Input/Select, Panel, PageHeader, Stat, Badge, DataTable, Tabs, EmptyState/ErrorState/Skeleton). Design tokens are CSS variables in `frontend/src/index.css` and are exposed to Tailwind and to charts (`frontend/src/design/chartTheme.ts`). Run `npm run dev` and open `/ui` for a live reference. New screens should use the kit; older pages are being migrated.
 
+## App shell
+
+`frontend/src/layout/` holds the signed-in layout: a fixed sidebar with grouped navigation (Operate, Analyse, Plan) on large screens; a drawer and bottom bar below 1024px; a top bar with breadcrumb, a Ctrl/Cmd+K page switcher and the account menu. Navigation items are defined once in `layout/nav.ts`. Route changes are instant, focus moves to the page content, and there is a skip link. Each page's browser-tab title comes from the navigation, or from its `PageHeader`.
+
 ## Design notes
 
 The interface uses flat surfaces with hairline borders, one teal accent, IBM Plex type, and motion only where it explains a change (press feedback on buttons, short enter transitions). Decorative effects such as glass blur, glows, gradient text and looping animations were removed. Global styles live in `frontend/src/index.css` under "Refinement layer"; colour tokens are in `frontend/tailwind.config.js`.

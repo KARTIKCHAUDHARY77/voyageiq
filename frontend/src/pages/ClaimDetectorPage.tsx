@@ -368,7 +368,7 @@ export default function ClaimDetectorPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-navy-950 p-6 space-y-6">
+    <div className="space-y-6">
       {/* ── Page Header ── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between flex-wrap gap-4">
         <div>
