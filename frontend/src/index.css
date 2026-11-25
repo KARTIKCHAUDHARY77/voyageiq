@@ -1130,3 +1130,11 @@ html { -webkit-tap-highlight-color: transparent; }
   --dur-base: 180ms;
   --dur-sheet: 280ms;
 }
+
+
+/* Map tiles come from OpenStreetMap (light). Inverting them gives a dark chart that matches the interface. */
+.track-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) saturate(0.55) contrast(0.95); }
+.track-map .leaflet-container { background: rgb(var(--c-base)); font-family: inherit; }
+.track-map .leaflet-control-attribution { background: rgba(6, 14, 26, 0.75); color: rgb(var(--c-fg-subtle)); }
+.track-map .leaflet-control-attribution a { color: rgb(var(--c-fg-muted)); }
+.track-map .leaflet-bar a { background: rgb(var(--c-surface-2)); color: rgb(var(--c-fg)); border-color: rgba(148,170,200,0.26); }

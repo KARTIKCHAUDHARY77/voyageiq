@@ -334,13 +334,10 @@ def get_voyage_performance(voyage_id):
                    .order_by(NoonReport.report_date.asc()).all())
 
         if not reports:
-            ws = float(voyage.charter_party_speed or 14.0)
-            wc = float(voyage.charter_party_consumption or 28.5)
             return jsonify({
                 'voyage_id': voyage_id, 'voyage_number': voyage.voyage_number,
                 'vessel_name': voyage.vessel.name if voyage.vessel else None,
-                'summary': {'message': 'No noon reports yet. Add reports to see performance.'},
-                'daily': [], 'weekly': [],
+                'summary': None, 'daily': [],
             })
 
         daily_map = defaultdict(lambda: {'speeds':[], 'fuels':[], 'distances':[], 'bft':[]})
@@ -368,17 +365,21 @@ def get_voyage_performance(voyage_id):
         all_fuels  = [float(r.total_fuel_consumption) for r in reports if r.total_fuel_consumption]
         all_dists  = [float(r.distance_noon_to_noon) for r in reports if r.distance_noon_to_noon]
         td = sum(all_dists); tf = sum(all_fuels)
-        ws = float(voyage.charter_party_speed or 14.0)
-        wc = float(voyage.charter_party_consumption or 28.5)
-        avg_s = round(sum(all_speeds)/len(all_speeds), 2) if all_speeds else ws
-        avg_f = round(sum(all_fuels)/len(all_fuels), 2) if all_fuels else wc
+        vessel = voyage.vessel
+        ws = voyage.charter_party_speed or (vessel.warranted_speed if vessel else None)
+        wc = voyage.charter_party_consumption or (vessel.warranted_consumption if vessel else None)
+        ws = float(ws) if ws else None
+        wc = float(wc) if wc else None
+        avg_s = round(sum(all_speeds)/len(all_speeds), 2) if all_speeds else None
+        avg_f = round(sum(all_fuels)/len(all_fuels), 2) if all_fuels else None
 
         summary = {
             'total_distance_nm': round(td, 1), 'total_fuel_mt': round(tf, 1),
-            'avg_speed': avg_s, 'cp_speed': ws, 'speed_variance': round(avg_s - ws, 2),
+            'avg_speed': avg_s, 'cp_speed': ws,
+            'speed_variance': round(avg_s - ws, 2) if avg_s is not None and ws else None,
             'avg_daily_fuel': avg_f, 'cp_consumption': wc,
-            'consumption_variance_pct': round((avg_f - wc) / wc * 100, 1) if wc else 0,
-            'fuel_efficiency_nm_mt': round(td/tf, 2) if tf else 0,
+            'consumption_variance_pct': round((avg_f - wc) / wc * 100, 1) if avg_f is not None and wc else None,
+            'fuel_efficiency_nm_mt': round(td/tf, 2) if tf else None,
             'report_count': len(reports),
         }
 
@@ -404,6 +405,6 @@ def get_voyage_claims(voyage_id):
                         'vessel_name': voyage.vessel.name if voyage.vessel else None,
                         'claims': [c.to_dict() for c in claims],
                         'total_claims': len(claims),
-                        'total_amount_usd': round(sum((c.estimated_impact_usd or 0) for c in claims), 2)})
+                        'total_amount_usd': round(sum(float(c.estimated_impact_usd or 0) for c in claims), 2)})
     except Exception as e:
         return jsonify({'error': 'Request failed'}), 500

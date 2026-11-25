@@ -51,7 +51,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, empty, onRowClick
               {columns.map(c => (
                 <td
                   key={c.key}
-                  className={`px-4 h-10 border-b border-line text-fg transition-colors duration-[120ms] group-hover:bg-fg/[0.03] ${c.numeric ? 'text-right font-mono tabular-nums' : ''}`}
+                  className={`px-4 h-10 whitespace-nowrap border-b border-line text-fg transition-colors duration-[120ms] group-hover:bg-fg/[0.03] ${c.numeric ? 'text-right font-mono tabular-nums' : ''}`}
                 >
                   {c.render ? c.render(row) : ((row as Record<string, unknown>)[c.key] as React.ReactNode) ?? <span className="text-fg-subtle">–</span>}
                 </td>

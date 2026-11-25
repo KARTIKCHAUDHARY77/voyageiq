@@ -147,7 +147,7 @@ All routes are under `/api` and need a bearer token except `/auth/login`, `/auth
 
 ## Component kit
 
-Reusable primitives live in `frontend/src/components/kit/` (Button, Field/Input/Select, Panel, PageHeader, Stat, Badge, DataTable, Tabs, EmptyState/ErrorState/Skeleton). Design tokens are CSS variables in `frontend/src/index.css` and are exposed to Tailwind and to charts (`frontend/src/design/chartTheme.ts`). Run `npm run dev` and open `/ui` for a live reference. New screens should use the kit; older pages are being migrated.
+Reusable primitives live in `frontend/src/components/kit/` (Button, Field/Input/Select, Panel, PageHeader, Stat, Badge, DataTable, Tabs, EmptyState/ErrorState/Skeleton). Design tokens are CSS variables in `frontend/src/index.css` and are exposed to Tailwind and to charts (`frontend/src/design/chartTheme.ts`). Run `npm run dev` and open `/ui` for a live reference. Every screen now uses the kit. Maps (`TrackMap`) draw reported noon positions on OpenStreetMap tiles, darkened with a CSS filter; for heavy production use, switch the tile URL to a provider you have an agreement with.
 
 ## App shell
 

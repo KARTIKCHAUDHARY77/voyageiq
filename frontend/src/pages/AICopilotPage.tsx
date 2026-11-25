@@ -1,492 +1,182 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Bot,
-  Send,
-  User,
-  Anchor,
-  Zap,
-  TrendingUp,
-  Fuel,
-  Map,
-  FileText,
-  ChevronDown,
-  AlertTriangle,
-  Lightbulb,
-  MessageSquare,
-  Ship,
-  Plus,
-  Trash2,
-  Clock,
-} from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Plus, SendHorizontal } from 'lucide-react'
+import { Badge, Button, PageHeader, Select } from '../components/kit'
 import { copilotAPI, vesselsAPI } from '../services/api'
-import { ChatMessage, Vessel } from '../types'
-import { format } from 'date-fns'
-import toast from 'react-hot-toast'
+import { useApi } from '../lib/useApi'
+import { shortDate } from '../lib/format'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface ConversationMeta {
+interface Msg {
   id: string
-  title: string
-  created_at: string
-  message_count: number
+  role: 'user' | 'assistant'
+  content: string
+  failed?: boolean
+  meta?: { ai_used?: boolean; model?: string; recommendations?: unknown[]; warnings?: unknown[] }
 }
 
-const SUGGESTED_PROMPTS = [
-  { icon: <Fuel className="w-4 h-4" />,       label: 'Why did fuel consumption increase?',      prompt: 'Why did fuel consumption increase on the last voyage?' },
-  { icon: <TrendingUp className="w-4 h-4" />,  label: 'How can I save fuel?',                   prompt: 'What are the best strategies to reduce fuel consumption for this vessel?' },
-  { icon: <Map className="w-4 h-4" />,         label: 'What route is recommended?',             prompt: 'What is the optimal route recommendation considering current weather conditions?' },
-  { icon: <Ship className="w-4 h-4" />,        label: 'Analyze vessel performance',             prompt: 'Provide a comprehensive analysis of the current vessel performance.' },
-  { icon: <FileText className="w-4 h-4" />,    label: 'Show open claims summary',               prompt: 'Summarize all open charter party claims and their financial impact.' },
+const SUGGESTIONS = [
+  'Why did fuel consumption change on the last voyage?',
+  'How is this vessel performing against its warranted figures?',
+  'Summarise the open claims and what drives them.',
+  'Where am I losing the most fuel to weather?',
 ]
 
-// ── Markdown renderer (simple) ────────────────────────────────────────────────
-
-function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split('\n')
-  return lines.map((line, i) => {
-    // Bold **text**
-    const bold = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic *text*
-    const italic = bold.replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Headings
-    if (italic.startsWith('###')) return <h4 key={i} className="text-white font-semibold text-sm mt-2 mb-1" dangerouslySetInnerHTML={{ __html: italic.replace(/^###\s*/, '') }} />
-    if (italic.startsWith('##')) return <h3 key={i} className="text-white font-semibold text-sm mt-3 mb-1" dangerouslySetInnerHTML={{ __html: italic.replace(/^##\s*/, '') }} />
-    // List items
-    if (italic.startsWith('- ') || italic.startsWith('* ')) return <li key={i} className="text-white/80 text-sm ml-3 list-disc" dangerouslySetInnerHTML={{ __html: italic.slice(2) }} />
-    // Numbered list
-    if (/^\d+\. /.test(italic)) return <li key={i} className="text-white/80 text-sm ml-3 list-decimal" dangerouslySetInnerHTML={{ __html: italic.replace(/^\d+\. /, '') }} />
-    // Empty line
-    if (italic.trim() === '') return <div key={i} className="h-1" />
-    return <p key={i} className="text-white/80 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: italic }} />
+/** Inline formatting without innerHTML: **bold** and `code` become React elements, everything else stays text. */
+function inline(text: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g).filter(Boolean).map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="font-semibold text-fg">{part.slice(2, -2)}</strong>
+    if (part.length > 2 && part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) return <em key={i}>{part.slice(1, -1)}</em>
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={i} className="font-mono text-[12px] bg-fg/10 rounded px-1">{part.slice(1, -1)}</code>
+    return <React.Fragment key={i}>{part}</React.Fragment>
   })
 }
 
-// ── TypingIndicator ────────────────────────────────────────────────────────────
-
-const TypingIndicator: React.FC = () => (
-  <div className="flex items-end gap-3">
-    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
-      <Bot className="w-4 h-4 text-white" />
-    </div>
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
-      <div className="flex gap-1.5 items-center h-5">
-        {[0, 1, 2].map(i => (
-          <motion.div
-            key={i}
-            className="w-2 h-2 rounded-full bg-teal-400"
-            animate={{ y: [0, -6, 0] }}
-            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
-      </div>
-    </div>
-  </div>
-)
-
-// ── MessageBubble ─────────────────────────────────────────────────────────────
-
-interface MessageBubbleProps {
-  message: ChatMessage
+/** Model output is untrusted text. It is rendered as elements, never as HTML. */
+function Markdown({ text }: { text: string }) {
+  const out: React.ReactNode[] = []
+  let bullets: string[] = []
+  const flush = (key: string) => {
+    if (bullets.length) { out.push(<ul key={key} className="list-disc pl-5 space-y-1">{bullets.map((b, i) => <li key={i}>{inline(b)}</li>)}</ul>); bullets = [] }
+  }
+  text.split('\n').forEach((line, i) => {
+    const m = line.match(/^\s*[-*•]\s+(.*)$/)
+    if (m) { bullets.push(m[1]); return }
+    flush(`ul-${i}`)
+    if (line.trim()) out.push(<p key={i}>{inline(line)}</p>)
+  })
+  flush('ul-end')
+  return <div className="space-y-2 text-body text-fg-muted [&_strong]:text-fg">{out}</div>
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
-  const isUser = message.role === 'user'
-  const recommendations = (message as unknown as { recommendations?: Array<{ id: string; title: string; description: string; estimated_savings?: number }> }).recommendations
-  const warnings = (message as unknown as { warnings?: string[] }).warnings
+const asText = (x: unknown) => (typeof x === 'string' ? x : x && typeof x === 'object' ? [(x as any).title, (x as any).description ?? (x as any).detail].filter(Boolean).join(': ') : '')
 
+function Bubble({ m }: { m: Msg }) {
+  if (m.role === 'user') {
+    return <div className="flex justify-end"><div className="max-w-[85%] rounded-panel bg-accent/10 border border-accent/25 px-3.5 py-2.5 text-body text-fg whitespace-pre-wrap break-words">{m.content}</div></div>
+  }
+  const recs = (m.meta?.recommendations ?? []).map(asText).filter(Boolean)
+  const warns = (m.meta?.warnings ?? []).map(asText).filter(Boolean)
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`flex items-end gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
-    >
-      {/* Avatar */}
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser ? 'bg-ocean-500' : 'bg-teal-500'}`}>
-        {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
-      </div>
-
-      <div className={`max-w-[75%] space-y-2 ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
-        {/* Message bubble */}
-        <div className={`px-4 py-3 rounded-2xl ${isUser ? 'bg-teal-600/80 border border-teal-500/30 rounded-br-sm' : 'bg-white/5 backdrop-blur-md border border-white/10 rounded-bl-sm'}`}>
-          {isUser ? (
-            <p className="text-white text-sm leading-relaxed">{message.content}</p>
-          ) : (
-            <div className="space-y-1">{renderMarkdown(message.content)}</div>
-          )}
-        </div>
-
-        {/* Timestamp */}
-        <p className="text-white/25 text-xs px-1">
-          {format(new Date(message.timestamp), 'HH:mm')}
-        </p>
-
-        {/* Warnings */}
-        {warnings && warnings.length > 0 && (
-          <div className="w-full space-y-2">
-            {warnings.map((w, i) => (
-              <div key={i} className="flex items-start gap-2 bg-warning-500/10 border border-warning-500/30 rounded-xl px-3 py-2.5">
-                <AlertTriangle className="w-4 h-4 text-warning-400 flex-shrink-0 mt-0.5" />
-                <p className="text-warning-300 text-xs leading-relaxed">{w}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Recommendations */}
-        {recommendations && recommendations.length > 0 && (
-          <div className="w-full space-y-2">
-            {recommendations.map(rec => (
-              <div key={rec.id} className="bg-teal-500/5 border border-teal-500/20 rounded-xl p-3">
-                <div className="flex items-start gap-2">
-                  <Lightbulb className="w-4 h-4 text-teal-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-teal-300 text-xs font-semibold">{rec.title}</p>
-                    <p className="text-white/60 text-xs mt-0.5 leading-relaxed">{rec.description}</p>
-                    {rec.estimated_savings && (
-                      <p className="text-success-400 text-xs font-medium mt-1">
-                        Est. savings: ${rec.estimated_savings.toLocaleString()}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
+    <div className="max-w-[92%] space-y-2.5">
+      {m.failed ? <p role="alert" className="text-body text-signal-port">{m.content}</p> : <Markdown text={m.content} />}
+      {warns.length > 0 && <ul className="space-y-1">{warns.map((w, i) => <li key={i} className="text-label text-signal-caution border-l-2 border-signal-caution/50 pl-2.5">{w}</li>)}</ul>}
+      {recs.length > 0 && <ul className="space-y-1">{recs.map((r, i) => <li key={i} className="text-label text-fg-muted border-l-2 border-line-strong pl-2.5">{r}</li>)}</ul>}
+      {m.meta && !m.failed && <p className="text-meta normal-case tracking-normal text-fg-subtle">{m.meta.ai_used ? `Answered by ${m.meta.model}` : 'Answered by the built-in rule engine, not a language model'}</p>}
+    </div>
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
 export default function AICopilotPage() {
-  const [messages, setMessages]               = useState<ChatMessage[]>([])
-  const [input, setInput]                     = useState('')
-  const [loading, setLoading]                 = useState(false)
-  const [vessels, setVessels]                 = useState<Vessel[]>([])
-  const [selectedVessel, setSelectedVessel]   = useState<string>('')
-  const [conversations, setConversations]     = useState<ConversationMeta[]>([])
-  const [conversationId, setConversationId]   = useState<string | undefined>()
-  const [showSidebar, setShowSidebar]         = useState(true)
-  const messagesEndRef                        = useRef<HTMLDivElement>(null)
-  const textareaRef                           = useRef<HTMLTextAreaElement>(null)
+  const vessels = useApi<any[]>(() => vesselsAPI.list().then(r => r.data?.vessels ?? r.data ?? []), [])
+  const history = useApi<any[]>(() => copilotAPI.getConversations().then(r => r.data?.conversations ?? []), [])
 
-  useEffect(() => {
-    fetchVessels()
-    fetchConversations()
-    // Initial greeting
-    const greeting: ChatMessage = {
-      id: 'greeting',
-      conversation_id: '',
-      role: 'assistant',
-      content: `**Welcome to VoyageIQ AI Copilot!**\n\nI'm your AI-powered maritime operations assistant. I can help you with:\n\n- **Performance Analysis** – Speed, fuel, and efficiency insights\n- **Charter Party Claims** – Detection and dispute support\n- **Route Optimization** – Weather-aware routing\n- **Compliance Monitoring** – MARPOL, CII, and reporting\n\nSelect a vessel above to give me context, then ask me anything!`,
-      timestamp: new Date().toISOString(),
-    }
-    setMessages([greeting])
-  }, [])
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [conversationId, setConversationId] = useState<string | undefined>()
+  const [vesselId, setVesselId] = useState('')
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const end = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [messages, busy])
 
-  const fetchVessels = async () => {
-    try {
-      const res = await vesselsAPI.list()
-      setVessels(res.data?.vessels ?? res.data ?? [])
-    } catch { /* the vessel picker stays empty; chat still works */ }
-  }
-
-  const fetchConversations = async () => {
-    try {
-      const res = await copilotAPI.getConversations()
-      setConversations(res.data?.conversations ?? [])
-    } catch { /* history is optional */ }
-  }
-
-  const autoResize = () => {
-    const ta = textareaRef.current
-    if (!ta) return
-    ta.style.height = 'auto'
-    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
-  }
-
-  const sendMessage = useCallback(async (text?: string) => {
-    const content = (text ?? input).trim()
-    if (!content || loading) return
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      conversation_id: conversationId ?? '',
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString(),
-    }
-
-    setMessages(prev => [...prev, userMsg])
+  const send = useCallback(async (text: string) => {
+    const content = text.trim()
+    if (!content || busy) return
     setInput('')
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    setLoading(true)
-
+    setMessages(m => [...m, { id: `u${Date.now()}`, role: 'user', content }])
+    setBusy(true)
     try {
-      const res = await copilotAPI.chat(content, conversationId, selectedVessel || undefined)
-      const data = res.data
-      if (data.conversation_id) setConversationId(data.conversation_id)
+      const res = await copilotAPI.chat(content, conversationId, vesselId || undefined)
+      const d = res.data
+      if (d.conversation_id && d.conversation_id !== conversationId) { setConversationId(d.conversation_id); history.reload() }
+      setMessages(m => [...m, { id: d.message_id ?? `a${Date.now()}`, role: 'assistant', content: d.response ?? '', meta: d.metadata }])
+    } catch (err: any) {
+      const limited = err?.response?.status === 429
+      setMessages(m => [...m, { id: `e${Date.now()}`, role: 'assistant', failed: true, content: limited ? 'You are sending messages too quickly. Wait a moment and try again.' : 'The assistant could not be reached, so this question was not answered. Try again.' }])
+    } finally { setBusy(false) }
+  }, [busy, conversationId, vesselId, history])
 
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        conversation_id: data.conversation_id ?? '',
-        role: 'assistant',
-        content: data.response ?? data.message ?? 'I processed your request.',
-        timestamp: new Date().toISOString(),
-        ...(data.recommendations ? { recommendations: data.recommendations } : {}),
-        ...(data.warnings ? { warnings: data.warnings } : {}),
-      } as ChatMessage
-      setMessages(prev => [...prev, aiMsg])
-    } catch {
-      const failed: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        conversation_id: conversationId ?? '',
-        role: 'assistant',
-        content: 'The assistant could not be reached, so this question was not answered. Try again in a moment.',
-        timestamp: new Date().toISOString(),
-      } as ChatMessage
-      setMessages(prev => [...prev, failed])
-    } finally {
-      setLoading(false)
-    }
-  }, [input, loading, conversationId, selectedVessel])
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+  const openConversation = async (id: string) => {
+    if (!id) { setConversationId(undefined); setMessages([]); return }
+    try {
+      const res = await copilotAPI.getConversation(id)
+      setConversationId(id)
+      setVesselId(res.data?.conversation?.vessel_id ?? '')
+      setMessages((res.data?.messages ?? []).map((m: any) => ({ id: m.id, role: m.role, content: m.content, meta: m.metadata })))
+    } catch { setMessages([{ id: 'x', role: 'assistant', failed: true, content: 'Could not open that conversation.' }]) }
   }
 
-  const startNewConversation = () => {
-    setConversationId(undefined)
-    setMessages([])
-    const greeting: ChatMessage = {
-      id: 'greeting-' + Date.now(),
-      conversation_id: '',
-      role: 'assistant',
-      content: '**New conversation started.** How can I help you?',
-      timestamp: new Date().toISOString(),
-    }
-    setMessages([greeting])
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) }
   }
-
-  const activeVessel = vessels.find(v => v.id === selectedVessel)
 
   return (
-    <div className="h-[calc(100dvh-8.5rem)] lg:h-[calc(100dvh-7rem)] min-h-[28rem] bg-surface-1 border border-line rounded-panel flex overflow-hidden">
-      {/* ── Sidebar: Conversations ── */}
-      <AnimatePresence>
-        {showSidebar && (
-          <motion.aside
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex-shrink-0 border-r border-white/10 bg-navy-900/50 backdrop-blur-md flex flex-col overflow-hidden"
-          >
-            <div className="p-4 border-b border-white/10">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-white font-semibold text-sm font-display flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-teal-400" /> Conversations
-                </h2>
-                <button onClick={startNewConversation} className="w-7 h-7 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-teal-400 rounded-lg flex items-center justify-center transition-[color,background-color,border-color,opacity,transform]">
-                  <Plus className="w-3.5 h-3.5" />
+    <>
+      <PageHeader title="AI Copilot" description="Ask about performance, fuel, weather and claims. Answers draw on the vessel and voyage you select." />
+
+      <div className="bg-surface-1 border border-line rounded-panel flex flex-col lg:flex-row h-[calc(100dvh-14rem)] lg:h-[calc(100dvh-12rem)] min-h-[26rem] overflow-hidden">
+        {/* Conversations: a sidebar on large screens, a menu above the chat on small ones. */}
+        <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-line">
+          <div className="flex items-center justify-between px-3 h-11 border-b border-line">
+            <h2 className="text-body font-semibold text-fg">History</h2>
+            <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => openConversation('')}>New</Button>
+          </div>
+          <ul className="flex-1 overflow-y-auto p-1.5">
+            {(history.data ?? []).length === 0 && <li className="px-3 py-4 text-label text-fg-subtle">No saved conversations.</li>}
+            {(history.data ?? []).map(c => (
+              <li key={c.id}>
+                <button onClick={() => openConversation(c.id)} aria-current={c.id === conversationId}
+                  className={`w-full text-left rounded-ctl px-3 py-2 transition-colors duration-[120ms] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${c.id === conversationId ? 'bg-accent/10' : '[@media(hover:hover)]:hover:bg-fg/5'}`}>
+                  <p className="text-body text-fg truncate">{c.last_message ?? 'Empty conversation'}</p>
+                  <p className="text-label text-fg-subtle">{c.vessel_name ?? 'No vessel'} · {shortDate(c.last_message_at ?? c.created_at)}</p>
                 </button>
-              </div>
-            </div>
+              </li>
+            ))}
+          </ul>
+        </aside>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-              {conversations.length === 0 ? (
-                <div className="text-center py-8 text-white/25">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">No conversations yet</p>
-                </div>
-              ) : (
-                conversations.map(conv => (
-                  <button
-                    key={conv.id}
-                    onClick={() => setConversationId(conv.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,transform] ${conv.id === conversationId ? 'bg-teal-500/20 border border-teal-500/30' : 'hover:bg-white/5 border border-transparent'}`}
-                  >
-                    <p className={`text-xs font-medium truncate ${conv.id === conversationId ? 'text-teal-300' : 'text-white/70'}`}>{conv.title}</p>
-                    <p className="text-white/30 text-xs mt-0.5 flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5" />
-                      {format(new Date(conv.created_at), 'MMM d, HH:mm')}
-                    </p>
-                  </button>
-                ))
-              )}
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-line">
+            <Select aria-label="Vessel context" value={vesselId} onChange={e => setVesselId(e.target.value)} className="h-8 w-full sm:w-56">
+              <option value="">No vessel context</option>
+              {(vessels.data ?? []).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </Select>
+            <Select aria-label="Conversation" value={conversationId ?? ''} onChange={e => openConversation(e.target.value)} className="h-8 w-full sm:w-56 lg:hidden">
+              <option value="">New conversation</option>
+              {(history.data ?? []).map(c => <option key={c.id} value={c.id}>{(c.last_message ?? 'Conversation').slice(0, 40)}</option>)}
+            </Select>
+            <Button size="sm" variant="ghost" className="lg:hidden" onClick={() => openConversation('')}>New</Button>
+            {vesselId === '' && <Badge tone="neutral">General answers only</Badge>}
+          </div>
 
-      {/* ── Main Chat Area ── */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-white/10 bg-navy-900/30 backdrop-blur-md px-6 py-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <button onClick={() => setShowSidebar(s => !s)} className="w-8 h-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center text-white/50 transition-[color,background-color,border-color,opacity,transform]">
-              <MessageSquare className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-teal-500 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-white font-bold font-display text-lg">Maritime AI Copilot</h1>
-                  <motion.div
-                    className="w-2 h-2 rounded-full bg-success-400"
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                </div>
-                <p className="text-white/40 text-xs">Powered by VoyageIQ Intelligence Engine</p>
-              </div>
-            </div>
-
-            {/* Vessel selector */}
-            <div className="ml-auto flex items-center gap-3">
-              <div className="relative">
-                <Ship className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-                <select
-                  value={selectedVessel}
-                  onChange={e => setSelectedVessel(e.target.value)}
-                  className="bg-white/5 border border-white/10 text-white text-sm pl-8 pr-8 py-2 rounded-xl focus:outline-none focus:border-teal-500/50 appearance-none min-w-48"
-                >
-                  <option value="">No vessel context</option>
-                  {vessels.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
+          <div role="log" aria-live="polite" aria-label="Conversation" className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+            {messages.length === 0 && (
+              <div className="max-w-xl">
+                <p className="text-body text-fg">Ask a question about your fleet.</p>
+                <p className="text-body text-fg-muted mt-1">Select a vessel above for answers based on its noon reports. Without one, answers are general.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {SUGGESTIONS.map(s => (
+                    <button key={s} onClick={() => send(s)} className="text-left text-label text-fg-muted border border-line-strong rounded-ctl px-3 py-2 transition-[border-color,color,transform] duration-[140ms] active:scale-[0.98] [@media(hover:hover)]:hover:border-fg-subtle [@media(hover:hover)]:hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">{s}</button>
                   ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* Context chips */}
-          {activeVessel && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 mt-3 flex-wrap">
-              <span className="px-2.5 py-1 bg-teal-500/10 border border-teal-500/20 text-teal-400 text-xs rounded-full flex items-center gap-1.5">
-                <Anchor className="w-3 h-3" /> {activeVessel.type}
-              </span>
-              <span className="px-2.5 py-1 bg-ocean-500/10 border border-ocean-500/20 text-ocean-400 text-xs rounded-full">
-                IMO {activeVessel.imo}
-              </span>
-              <span className="px-2.5 py-1 bg-white/5 border border-white/10 text-white/50 text-xs rounded-full">
-                Health: {activeVessel.health_score}/100
-              </span>
-              {activeVessel.active_voyage && (
-                <span className="px-2.5 py-1 bg-success-500/10 border border-success-500/20 text-success-400 text-xs rounded-full flex items-center gap-1.5">
-                  <Zap className="w-3 h-3" /> {activeVessel.active_voyage}
-                </span>
-              )}
-            </motion.div>
-          )}
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {messages.length === 0 && !loading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-8">
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-teal-500/20 border border-teal-500/20 flex items-center justify-center mb-4">
-                  <Bot className="w-8 h-8 text-teal-400" />
                 </div>
-                <h2 className="text-white font-bold font-display text-xl mb-2">How can I help?</h2>
-                <p className="text-white/40 text-sm">Ask me anything about maritime operations</p>
               </div>
-
-              {/* Suggested prompts */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-2xl">
-                {SUGGESTED_PROMPTS.map(p => (
-                  <button
-                    key={p.prompt}
-                    onClick={() => sendMessage(p.prompt)}
-                    className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/70 hover:text-white text-sm px-4 py-3 rounded-xl transition-[color,background-color,border-color,opacity,transform] text-left"
-                  >
-                    <span className="text-teal-400 flex-shrink-0">{p.icon}</span>
-                    <span className="text-xs">{p.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              <AnimatePresence initial={false}>
-                {messages.map(msg => (
-                  <MessageBubble key={msg.id} message={msg} />
-                ))}
-              </AnimatePresence>
-              {loading && <TypingIndicator />}
-            </>
-          )}
-
-          {/* Suggested prompts bar (when there are messages) */}
-          {messages.length > 0 && !loading && (
-            <div className="flex gap-2 flex-wrap pt-2">
-              {SUGGESTED_PROMPTS.slice(0, 3).map(p => (
-                <button
-                  key={p.prompt}
-                  onClick={() => sendMessage(p.prompt)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/50 hover:text-teal-400 text-xs rounded-full transition-[color,background-color,border-color,opacity,transform]"
-                >
-                  <span className="opacity-70">{p.icon}</span>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input area */}
-        <div className="flex-shrink-0 border-t border-white/10 bg-navy-900/30 backdrop-blur-md p-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-3 bg-white/5 border border-white/10 hover:border-teal-500/30 focus-within:border-teal-500/50 rounded-2xl p-3 transition-[color,background-color,border-color,opacity,transform]">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={e => { setInput(e.target.value); autoResize() }}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything about vessel performance, routes, claims…"
-                rows={1}
-                className="flex-1 bg-transparent text-white text-sm resize-none focus:outline-none placeholder-white/25 leading-relaxed min-h-[24px] max-h-40"
-                style={{ height: 'auto' }}
-              />
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {input.trim() && (
-                  <button onClick={() => { setInput(''); if (textareaRef.current) textareaRef.current.style.height = 'auto' }} className="w-8 h-8 text-white/30 hover:text-white/60 flex items-center justify-center rounded-lg transition-[color,background-color,border-color,opacity,transform]">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={() => sendMessage()}
-                  disabled={!input.trim() || loading}
-                  className="w-9 h-9 bg-teal-500 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center text-white transition-[color,background-color,border-color,opacity,transform]"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <p className="text-white/20 text-xs text-center mt-2">
-              Press Enter to send · Shift+Enter for new line · AI may make errors – verify critical data
-            </p>
+            )}
+            {messages.map(m => <Bubble key={m.id} m={m} />)}
+            {busy && <p className="text-body text-fg-subtle" role="status">Working on it…</p>}
+            <div ref={end} />
           </div>
+
+          <form onSubmit={e => { e.preventDefault(); send(input) }} className="border-t border-line p-3 flex items-end gap-2">
+            <label htmlFor="copilot-input" className="sr-only">Your question</label>
+            <textarea
+              id="copilot-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKeyDown} rows={2} maxLength={4000}
+              placeholder="Ask about performance, fuel, claims…  (Enter to send, Shift+Enter for a new line)"
+              className="flex-1 resize-none rounded-ctl bg-base border border-line-strong px-3 py-2 text-body text-fg placeholder:text-fg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            />
+            <Button type="submit" variant="primary" disabled={!input.trim() || busy} aria-label="Send" className="h-10 w-10 !px-0"><SendHorizontal size={16} /></Button>
+          </form>
         </div>
       </div>
-    </div>
+      <p className="mt-3 text-label text-fg-subtle">Answers can be wrong. Check figures that matter against the reports before acting on them.</p>
+    </>
   )
 }
