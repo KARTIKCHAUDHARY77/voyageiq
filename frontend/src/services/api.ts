@@ -89,9 +89,9 @@ export const voyagesAPI = {
 
 export const analyticsAPI = {
   dashboard: () => api.get('/api/analytics/dashboard'),
-  fuel: (vesselId?: string) => api.get('/api/analytics/fuel', { params: { vessel_id: vesselId } }),
+  fuel: (vesselId?: string, days?: number) => api.get('/api/analytics/fuel', { params: { vessel_id: vesselId, days } }),
   performance: (vesselId?: string) => api.get('/api/analytics/performance', { params: { vessel_id: vesselId } }),
-  weatherImpact: (vesselId?: string) => api.get('/api/analytics/weather-impact', { params: { vessel_id: vesselId } }),
+  weatherImpact: (vesselId?: string, days?: number) => api.get('/api/analytics/weather-impact', { params: { vessel_id: vesselId, days } }),
 }
 
 export const claimsAPI = {

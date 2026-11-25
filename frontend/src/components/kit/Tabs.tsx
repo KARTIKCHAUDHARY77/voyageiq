@@ -27,7 +27,7 @@ export function Tabs({ items, value, onChange, label }: TabsProps) {
   }
 
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 border-b border-line overflow-x-auto">
+    <div role="tablist" aria-label={label} className="flex gap-1 border-b border-line overflow-x-auto overflow-y-hidden">
       {items.map((t, i) => {
         const active = t.key === value
         return (

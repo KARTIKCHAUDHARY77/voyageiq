@@ -315,22 +315,55 @@ def _build_preview(records: list[dict]) -> list[dict]:
     return records[:5]
 
 
+
+def _jsonable(records):
+    """Dates and times from the parser become ISO strings so they fit the JSON column."""
+    out = []
+    for rec in records:
+        out.append({k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in rec.items()})
+    return out
+
+
+def _coerce_temporal(rec):
+    """Inverse of _jsonable for the two fields the model stores as Date and Time."""
+    rec = dict(rec)
+    d = rec.get('report_date')
+    if isinstance(d, str):
+        try:
+            rec['report_date'] = datetime.strptime(d[:10], '%Y-%m-%d').date()
+        except ValueError:
+            rec['report_date'] = None
+    t = rec.get('report_time')
+    if isinstance(t, str):
+        try:
+            rec['report_time'] = datetime.strptime(t[:8], '%H:%M:%S').time()
+        except ValueError:
+            rec['report_time'] = None
+    return rec
+
+
 def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str,
-                              uploaded_by: str) -> list[NoonReport]:
+                              uploaded_by: str):
     """Convert parsed field dicts to NoonReport model instances."""
     noon_reports = []
-    for rec in records:
-        # Skip rows without at minimum a date
+    skipped = []
+    for line, rec in enumerate(records, start=1):
+        rec = _coerce_temporal(rec)
+        # A row without a date or a position cannot be stored honestly: do not guess either.
         if not rec.get('report_date'):
-            rec['report_date'] = date.today()
+            skipped.append(f'Row {line}: no report date')
+            continue
+        if rec.get('latitude') in (None, '') or rec.get('longitude') in (None, ''):
+            skipped.append(f'Row {line}: no position (latitude/longitude)')
+            continue
 
         nr = NoonReport(
             vessel_id=vessel_id,
             voyage_id=voyage_id,
-            report_date=rec.get('report_date', date.today()),
+            report_date=rec['report_date'],
             report_time=rec.get('report_time') or datetime.utcnow().time(),
-            latitude=rec.get('latitude', 0.0),
-            longitude=rec.get('longitude', 0.0),
+            latitude=rec['latitude'],
+            longitude=rec['longitude'],
             speed_over_ground=rec.get('speed_over_ground'),
             speed_through_water=rec.get('speed_through_water'),
             distance_noon_to_noon=rec.get('distance_noon_to_noon'),
@@ -365,10 +398,10 @@ def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str
             exhaust_temp_avg=rec.get('exhaust_temp_avg'),
             turbo_rpm=rec.get('turbo_rpm'),
             uploaded_by=uploaded_by,
-            raw_data=rec,
+            raw_data=_jsonable([rec])[0],
         )
         noon_reports.append(nr)
-    return noon_reports
+    return noon_reports, skipped
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +480,7 @@ def upload_report():
             parse_status='parsed' if records else 'failed',
             parsed_records=len(records),
             errors=parse_errors if parse_errors else None,
-            raw_parsed_data=records,
+            raw_parsed_data=_jsonable(records),
         )
         db.session.add(upload)
         db.session.commit()
@@ -532,20 +565,19 @@ def confirm_upload(upload_id):
         if not vessel:
             return jsonify({'success': False, 'error': 'Associated vessel not found.'}), 404
 
-        noon_reports = _records_to_noon_reports(
+        noon_reports, skipped_rows = _records_to_noon_reports(
             raw_records, upload.vessel_id, upload.voyage_id, user_id
         )
 
         saved_count = 0
-        errors = []
+        errors = list(skipped_rows)
         for nr in noon_reports:
             try:
-                db.session.add(nr)
-                db.session.flush()
+                with db.session.begin_nested():  # a savepoint, so one bad row cannot undo the others
+                    db.session.add(nr)
                 saved_count += 1
             except Exception as row_exc:
                 errors.append(f"Row skipped: {row_exc}")
-                db.session.rollback()
 
         upload.parse_status = 'confirmed'
         upload.parsed_records = saved_count

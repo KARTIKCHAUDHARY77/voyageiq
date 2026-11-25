@@ -378,10 +378,10 @@ def get_weather_impact():
             f'On {rough["report_count"]} days at Beaufort 6-7 the main engine burned '
             f'{rough["avg_excess_consumption_mt"]:+.1f} MT/day against the warranted figure.'
         )
-    if calm['report_count'] and calm['avg_speed_loss_kn'] is not None:
+    if calm['report_count'] and calm['avg_speed_loss_kn'] is not None and calm['avg_speed_loss_kn'] > 0.1:
         insights.append(
-            f'In calm weather (Beaufort 0-3, {calm["report_count"]} days) speed was '
-            f'{calm["avg_speed_loss_kn"]:+.2f} kn below warranted on average, so shortfalls there are not weather-related.'
+            f'In calm weather (Beaufort 0-3, {calm["report_count"]} days) speed was still '
+            f'{calm["avg_speed_loss_kn"]:.2f} kn below warranted on average, so that shortfall is not explained by weather.'
         )
 
     return jsonify({

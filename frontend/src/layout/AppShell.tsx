@@ -67,13 +67,13 @@ export function AppShell() {
       <Drawer open={drawer} onClose={closeDrawer} />
       <CommandPalette open={palette} onClose={closePalette} />
 
-      <div className="lg:pl-60 min-h-[100dvh] flex flex-col">
+      <div className="lg:pl-60 min-h-[100dvh] min-w-0 flex flex-col">
         <TopBar onMenu={() => setDrawer(true)} onSearch={() => setPalette(true)} />
         <main
           id="main"
           ref={main}
           tabIndex={-1}
-          className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-6 pb-24 lg:pb-8 outline-none"
+          className="flex-1 w-full min-w-0 max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-6 pb-24 lg:pb-8 outline-none"
         >
           <React.Suspense fallback={<PageFallback />}>
             <Outlet />

@@ -9,9 +9,9 @@ interface PanelProps extends Omit<React.HTMLAttributes<HTMLElement>, 'title'> {
 }
 
 /** The one surface used for grouped content: flat fill, hairline border, no shadow. */
-export function Panel({ title, actions, flush = false, className = '', children, ...rest }: PanelProps) {
+export const Panel = React.forwardRef<HTMLElement, PanelProps>(function Panel({ title, actions, flush = false, className = '', children, ...rest }, ref) {
   return (
-    <section className={`bg-surface-1 border border-line rounded-panel ${className}`} {...rest}>
+    <section ref={ref} className={`min-w-0 bg-surface-1 border border-line rounded-panel ${className}`} {...rest}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-3 px-4 h-11 border-b border-line">
           {title && <h2 className="text-body font-semibold text-fg">{title}</h2>}
@@ -21,4 +21,4 @@ export function Panel({ title, actions, flush = false, className = '', children,
       <div className={flush ? '' : 'p-4'}>{children}</div>
     </section>
   )
-}
+})

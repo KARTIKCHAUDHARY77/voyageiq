@@ -178,6 +178,39 @@ def list_noon_reports(voyage_id):
 # ---------------------------------------------------------------------------
 # Add noon report — maps ALL field names the frontend sends to actual model columns
 # ---------------------------------------------------------------------------
+
+NOON_RANGES = {
+    'latitude': (-90, 90), 'longitude': (-180, 180), 'speed_over_ground': (0, 40),
+    'speed_through_water': (0, 40), 'distance_noon_to_noon': (0, 1000), 'rpm': (0, 300),
+    'course': (0, 360), 'wind_force_bft': (0, 12), 'wind_speed_knots': (0, 200),
+    'wave_height': (0, 30), 'swell_height': (0, 30),
+    'me_lsfo': (0, 500), 'me_mgo': (0, 500), 'ae_lsfo': (0, 100), 'ae_mgo': (0, 100),
+    'boiler_lsfo': (0, 100), 'boiler_mgo': (0, 100), 'rob_lsfo': (0, 100000), 'rob_mgo': (0, 100000),
+}
+
+
+def _validate_noon(data):
+    """Return {field: message} for anything missing or out of a physically sensible range."""
+    errors = {}
+    if not data.get('report_date'):
+        errors['report_date'] = 'Report date is required'
+    for key in ('latitude', 'longitude'):
+        if data.get(key) in (None, ''):
+            errors[key] = 'Position is required'
+    for key, (lo, hi) in NOON_RANGES.items():
+        value = data.get(key)
+        if value in (None, ''):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            errors[key] = 'Must be a number'
+            continue
+        if not (lo <= number <= hi):
+            errors[key] = f'Must be between {lo} and {hi}'
+    return errors
+
+
 @voyages_bp.route('/<voyage_id>/noon-reports', methods=['POST'])
 @jwt_required()
 def add_noon_report(voyage_id):
@@ -186,7 +219,10 @@ def add_noon_report(voyage_id):
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
 
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
+        errors = _validate_noon(data)
+        if errors:
+            return jsonify({'error': 'Please fix the highlighted fields', 'fields': errors}), 400
 
         def parse_date(v):
             if not v: return None
@@ -197,6 +233,15 @@ def add_noon_report(voyage_id):
             if not v: return None
             try: return datetime.strptime(str(v)[:8], '%H:%M:%S').time()
             except: return None
+
+        report_day = parse_date(data.get('report_date'))
+        if report_day is None:
+            return jsonify({'error': 'Please fix the highlighted fields', 'fields': {'report_date': 'Use the format YYYY-MM-DD'}}), 400
+        duplicate = NoonReport.query.filter_by(
+            voyage_id=voyage_id, report_date=report_day, report_type=data.get('report_type', 'noon')).first()
+        if duplicate:
+            return jsonify({'error': 'A report of this type already exists for that date',
+                            'fields': {'report_date': 'Already reported for this voyage'}}), 409
 
         report = NoonReport(
             id=str(uuid.uuid4()),
