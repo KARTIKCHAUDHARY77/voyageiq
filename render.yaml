@@ -3,7 +3,9 @@ services:
   - type: web
     name: voyageiq-api
     runtime: python
+    plan: free
     rootDir: backend
+    healthCheckPath: /api/health
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn "app:create_app('production')" --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
