@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Custom Fonts ─────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ─── CSS Custom Properties ─────────────────────────────────────────────────── */
 :root {
@@ -32,7 +30,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'IBM Plex Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--navy-950);
   color: #e2e8f0;
   overflow-x: hidden;
@@ -950,4 +948,156 @@ input[type='range']:focus::-webkit-slider-thumb {
     background: white !important;
     color: black !important;
   }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Refinement layer
+   Flat surfaces, one accent, motion only where it explains something.
+   Class names are unchanged so every page picks this up.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --surface-1: #0b1626;
+  --surface-2: #0f1d31;
+  --line: rgba(148, 170, 200, 0.14);
+  --line-strong: rgba(148, 170, 200, 0.26);
+  --accent: #2bb3a3;
+  --accent-hover: #35c4b3;
+}
+
+html { scroll-behavior: auto; }
+body { font-feature-settings: 'tnum' 1, 'cv11' 1; }
+h1, h2, h3, h4 { letter-spacing: -0.015em; text-wrap: balance; }
+p { text-wrap: pretty; }
+
+/* Static, quiet background instead of a breathing gradient */
+.maritime-bg, .maritime-bg-animated {
+  background: var(--navy-950);
+  animation: none;
+}
+
+/* Surfaces: solid fill + hairline border, no blur, no lift on hover */
+.glass-card, .glass-card-strong, .stat-card {
+  background: var(--surface-1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+  transition: border-color 150ms var(--ease-out);
+}
+.glass-card-strong { background: var(--surface-2); }
+.glass-sidebar {
+  background: var(--navy-900);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-right: 1px solid var(--line);
+}
+.stat-card::before, .stat-card::after { content: none; }
+@media (hover: hover) and (pointer: fine) {
+  .glass-card:hover, .stat-card:hover {
+    background: var(--surface-1);
+    border-color: var(--line-strong);
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+/* No glow, no gradient text */
+.glow-teal, .glow-teal-sm, .glow-ocean, .glow-ocean-sm,
+.shadow-glow-teal, .shadow-glow-ocean { box-shadow: none; }
+.glow-text-teal, .glow-text-ocean { text-shadow: none; }
+.gradient-text-teal, .gradient-text-ocean, .gradient-text-warm {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  color: var(--accent);
+}
+.gradient-text-warm { color: #e0a43a; }
+
+/* Decorative loops off. Skeletons and the typing indicator stay: they signal waiting. */
+.animate-float, .animate-float-slow, .animate-wave, .animate-pulse-ring,
+.animate-shimmer, .animate-blink { animation: none; }
+.animate-scanline::after { content: none; }
+.vessel-marker-pulse::before { animation: none; opacity: 0; }
+
+/* Buttons: flat, immediate press feedback, specific transition properties */
+.btn-primary {
+  background: var(--accent);
+  color: #04141a;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: background-color 150ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.btn-secondary, .btn-danger {
+  border-radius: 8px;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.btn-primary:active, .btn-secondary:active, .btn-danger:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { background: var(--accent-hover); transform: none; box-shadow: none; }
+}
+button:disabled, .btn-primary:disabled { transform: none; }
+
+/* Inputs */
+.maritime-input, .maritime-select {
+  border-radius: 8px;
+  transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out);
+}
+.maritime-input:focus, .maritime-select:focus {
+  box-shadow: none;
+  border-color: var(--accent);
+  outline: 2px solid rgba(43, 179, 163, 0.35);
+  outline-offset: 1px;
+}
+:focus-visible { outline: 2px solid rgba(43, 179, 163, 0.6); outline-offset: 2px; }
+
+/* Navigation: flat active state with an accent rule, not a gradient pill */
+.nav-item { border-radius: 8px; transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out); }
+.nav-item-active {
+  background: rgba(43, 179, 163, 0.10);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Data: flat bars, plain dividers, solid chat bubble */
+.progress-teal, .progress-ocean, .progress-warning, .progress-success { background-image: none; }
+.progress-teal { background: var(--accent); }
+.progress-ocean { background: #4b9fd6; }
+.progress-warning { background: #e0a43a; }
+.progress-success { background: #3fb67a; }
+.progress-fill { transition: width 400ms var(--ease-out); }
+.divider, .divider-teal { background: var(--line); height: 1px; }
+.chat-bubble-user { background: rgba(43, 179, 163, 0.12); border: 1px solid rgba(43, 179, 163, 0.25); }
+.maritime-table th { letter-spacing: 0.04em; }
+.maritime-table td { font-variant-numeric: tabular-nums; }
+::-webkit-scrollbar-thumb { background: rgba(148, 170, 200, 0.28); border: none; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 170, 200, 0.45); }
+* { scrollbar-color: rgba(148, 170, 200, 0.28) transparent; }
+
+/* Touch: no sticky hover, no tap flash, no iOS input zoom */
+html { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 767px) {
+  input, select, textarea, .maritime-input, .maritime-select { font-size: 16px; }
+}
+
+/* Reduced motion: keep opacity changes, drop movement */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Login entrance: one short fade, since this screen is seen once per session */
+.login-enter { animation: loginEnter 240ms var(--ease-out) both; }
+@keyframes loginEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }

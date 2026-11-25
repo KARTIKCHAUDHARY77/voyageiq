@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..models import Claim, Voyage, Vessel, NoonReport
 from ..extensions import db
+from ..security import roles_required, CLAIM_WRITE_ROLES
 
 claims_bp = Blueprint('claims', __name__)
 
@@ -184,7 +185,7 @@ def list_claims():
             'total_open_amount_usd': round(float(total_open_amount), 2),
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve claims', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve claims'}), 500
 
 
 @claims_bp.route('/<int:claim_id>', methods=['GET'])
@@ -206,11 +207,12 @@ def get_claim(claim_id):
 
         return jsonify(data)
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve claim', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve claim'}), 500
 
 
 @claims_bp.route('', methods=['POST'])
 @jwt_required()
+@roles_required(*CLAIM_WRITE_ROLES)
 def create_claim():
     """Manually create a new claim."""
     try:
@@ -251,11 +253,12 @@ def create_claim():
         return jsonify(claim.to_dict()), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to create claim', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create claim'}), 500
 
 
 @claims_bp.route('/<int:claim_id>/status', methods=['PUT'])
 @jwt_required()
+@roles_required(*CLAIM_WRITE_ROLES)
 def update_claim_status(claim_id):
     """Update the status of a claim (e.g. open → under_review → resolved)."""
     try:
@@ -294,7 +297,7 @@ def update_claim_status(claim_id):
         })
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to update claim status', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to update claim status'}), 500
 
 
 @claims_bp.route('/detect/<int:voyage_id>', methods=['GET'])
@@ -385,4 +388,4 @@ def detect_claims(voyage_id):
         })
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Claim detection failed', 'details': str(e)}), 500
+        return jsonify({'error': 'Claim detection failed'}), 500

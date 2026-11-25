@@ -88,7 +88,7 @@ function renderMarkdown(text: string): React.ReactNode {
 
 const TypingIndicator: React.FC = () => (
   <div className="flex items-end gap-3">
-    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-ocean-500 flex items-center justify-center flex-shrink-0">
+    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
       <Bot className="w-4 h-4 text-white" />
     </div>
     <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
@@ -124,13 +124,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       className={`flex items-end gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* Avatar */}
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser ? 'bg-gradient-to-br from-ocean-500 to-ocean-600' : 'bg-gradient-to-br from-teal-500 to-ocean-500'}`}>
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser ? 'bg-ocean-500' : 'bg-teal-500'}`}>
         {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
       </div>
 
       <div className={`max-w-[75%] space-y-2 ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         {/* Message bubble */}
-        <div className={`px-4 py-3 rounded-2xl ${isUser ? 'bg-gradient-to-br from-teal-600/80 to-ocean-600/80 border border-teal-500/30 rounded-br-sm' : 'bg-white/5 backdrop-blur-md border border-white/10 rounded-bl-sm'}`}>
+        <div className={`px-4 py-3 rounded-2xl ${isUser ? 'bg-teal-600/80 border border-teal-500/30 rounded-br-sm' : 'bg-white/5 backdrop-blur-md border border-white/10 rounded-bl-sm'}`}>
           {isUser ? (
             <p className="text-white text-sm leading-relaxed">{message.content}</p>
           ) : (
@@ -203,7 +203,7 @@ export default function AICopilotPage() {
       id: 'greeting',
       conversation_id: '',
       role: 'assistant',
-      content: `**Welcome to VoyageIQ AI Copilot!** 🚢\n\nI'm your AI-powered maritime operations assistant. I can help you with:\n\n- **Performance Analysis** – Speed, fuel, and efficiency insights\n- **Charter Party Claims** – Detection and dispute support\n- **Route Optimization** – Weather-aware routing\n- **Compliance Monitoring** – MARPOL, CII, and reporting\n\nSelect a vessel above to give me context, then ask me anything!`,
+      content: `**Welcome to VoyageIQ AI Copilot!**\n\nI'm your AI-powered maritime operations assistant. I can help you with:\n\n- **Performance Analysis** – Speed, fuel, and efficiency insights\n- **Charter Party Claims** – Detection and dispute support\n- **Route Optimization** – Weather-aware routing\n- **Compliance Monitoring** – MARPOL, CII, and reporting\n\nSelect a vessel above to give me context, then ask me anything!`,
       timestamp: new Date().toISOString(),
     }
     setMessages([greeting])
@@ -325,7 +325,7 @@ export default function AICopilotPage() {
                 <h2 className="text-white font-semibold text-sm font-display flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-teal-400" /> Conversations
                 </h2>
-                <button onClick={startNewConversation} className="w-7 h-7 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-teal-400 rounded-lg flex items-center justify-center transition-all">
+                <button onClick={startNewConversation} className="w-7 h-7 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-teal-400 rounded-lg flex items-center justify-center transition-[color,background-color,border-color,opacity,transform]">
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -342,7 +342,7 @@ export default function AICopilotPage() {
                   <button
                     key={conv.id}
                     onClick={() => setConversationId(conv.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-all ${conv.id === conversationId ? 'bg-teal-500/20 border border-teal-500/30' : 'hover:bg-white/5 border border-transparent'}`}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,transform] ${conv.id === conversationId ? 'bg-teal-500/20 border border-teal-500/30' : 'hover:bg-white/5 border border-transparent'}`}
                   >
                     <p className={`text-xs font-medium truncate ${conv.id === conversationId ? 'text-teal-300' : 'text-white/70'}`}>{conv.title}</p>
                     <p className="text-white/30 text-xs mt-0.5 flex items-center gap-1">
@@ -362,12 +362,12 @@ export default function AICopilotPage() {
         {/* Header */}
         <div className="flex-shrink-0 border-b border-white/10 bg-navy-900/30 backdrop-blur-md px-6 py-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <button onClick={() => setShowSidebar(s => !s)} className="w-8 h-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center text-white/50 transition-all">
+            <button onClick={() => setShowSidebar(s => !s)} className="w-8 h-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center text-white/50 transition-[color,background-color,border-color,opacity,transform]">
               <MessageSquare className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-ocean-500 flex items-center justify-center shadow-glow-teal">
+              <div className="w-9 h-9 rounded-xl bg-teal-500 flex items-center justify-center">
                 <Bot className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -428,7 +428,7 @@ export default function AICopilotPage() {
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-8">
               <div className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-teal-500/20 to-ocean-500/20 border border-teal-500/20 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-teal-500/20 border border-teal-500/20 flex items-center justify-center mb-4">
                   <Bot className="w-8 h-8 text-teal-400" />
                 </div>
                 <h2 className="text-white font-bold font-display text-xl mb-2">How can I help?</h2>
@@ -441,7 +441,7 @@ export default function AICopilotPage() {
                   <button
                     key={p.prompt}
                     onClick={() => sendMessage(p.prompt)}
-                    className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/70 hover:text-white text-sm px-4 py-3 rounded-xl transition-all text-left"
+                    className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/70 hover:text-white text-sm px-4 py-3 rounded-xl transition-[color,background-color,border-color,opacity,transform] text-left"
                   >
                     <span className="text-teal-400 flex-shrink-0">{p.icon}</span>
                     <span className="text-xs">{p.label}</span>
@@ -467,7 +467,7 @@ export default function AICopilotPage() {
                 <button
                   key={p.prompt}
                   onClick={() => sendMessage(p.prompt)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/50 hover:text-teal-400 text-xs rounded-full transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-500/30 text-white/50 hover:text-teal-400 text-xs rounded-full transition-[color,background-color,border-color,opacity,transform]"
                 >
                   <span className="opacity-70">{p.icon}</span>
                   {p.label}
@@ -482,7 +482,7 @@ export default function AICopilotPage() {
         {/* Input area */}
         <div className="flex-shrink-0 border-t border-white/10 bg-navy-900/30 backdrop-blur-md p-4">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-3 bg-white/5 border border-white/10 hover:border-teal-500/30 focus-within:border-teal-500/50 rounded-2xl p-3 transition-all">
+            <div className="flex items-end gap-3 bg-white/5 border border-white/10 hover:border-teal-500/30 focus-within:border-teal-500/50 rounded-2xl p-3 transition-[color,background-color,border-color,opacity,transform]">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -495,14 +495,14 @@ export default function AICopilotPage() {
               />
               <div className="flex items-center gap-2 flex-shrink-0">
                 {input.trim() && (
-                  <button onClick={() => { setInput(''); if (textareaRef.current) textareaRef.current.style.height = 'auto' }} className="w-8 h-8 text-white/30 hover:text-white/60 flex items-center justify-center rounded-lg transition-all">
+                  <button onClick={() => { setInput(''); if (textareaRef.current) textareaRef.current.style.height = 'auto' }} className="w-8 h-8 text-white/30 hover:text-white/60 flex items-center justify-center rounded-lg transition-[color,background-color,border-color,opacity,transform]">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
                 <button
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || loading}
-                  className="w-9 h-9 bg-gradient-to-br from-teal-500 to-ocean-500 hover:from-teal-400 hover:to-ocean-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center text-white transition-all shadow-glow-teal"
+                  className="w-9 h-9 bg-teal-500 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center text-white transition-[color,background-color,border-color,opacity,transform]"
                 >
                   <Send className="w-4 h-4" />
                 </button>

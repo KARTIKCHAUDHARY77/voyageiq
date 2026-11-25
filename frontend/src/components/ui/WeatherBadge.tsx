@@ -240,7 +240,7 @@ export default function WeatherBadge({
           {Array.from({ length: 13 }, (_, i) => (
             <div
               key={i}
-              className="flex-1 h-1.5 rounded-full transition-all duration-500"
+              className="flex-1 h-1.5 rounded-full transition-[color,background-color,border-color,opacity,transform] duration-500"
               style={{
                 background: i <= bf
                   ? i <= 3 ? '#10B981' : i <= 5 ? '#EAB308' : i <= 7 ? '#F97316' : '#EF4444'

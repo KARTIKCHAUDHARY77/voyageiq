@@ -169,7 +169,7 @@ def get_dashboard():
             'period_days': 30,
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to generate dashboard', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to generate dashboard'}), 500
 
 
 @analytics_bp.route('/fuel', methods=['GET'])
@@ -276,7 +276,7 @@ def get_fuel_analytics():
             'generated_at': datetime.utcnow().isoformat(),
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to generate fuel analytics', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to generate fuel analytics'}), 500
 
 
 @analytics_bp.route('/performance', methods=['GET'])
@@ -376,7 +376,7 @@ def get_performance_trends():
             'generated_at': datetime.utcnow().isoformat(),
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to generate performance trends', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to generate performance trends'}), 500
 
 
 @analytics_bp.route('/weather-impact', methods=['GET'])
@@ -494,4 +494,4 @@ def get_weather_impact():
             ],
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to generate weather impact', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to generate weather impact'}), 500

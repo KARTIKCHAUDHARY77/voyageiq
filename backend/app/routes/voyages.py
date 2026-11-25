@@ -57,7 +57,7 @@ def list_voyages():
         return jsonify({'voyages': voyages_data, 'total': pagination.total,
                         'page': pagination.page, 'pages': pagination.pages})
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve voyages', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve voyages'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ def get_voyage(voyage_id):
         data['report_count'] = NoonReport.query.filter_by(voyage_id=voyage_id).count()
         return jsonify(data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def create_voyage():
         return jsonify(vd), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to create voyage', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create voyage'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ def update_voyage(voyage_id):
         return jsonify(voyage.to_dict())
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ def list_noon_reports(voyage_id):
         return jsonify({'reports': [r.to_dict() for r in pagination.items],
                         'total': pagination.total})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ def add_noon_report(voyage_id):
         return jsonify(report.to_dict()), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to add noon report', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to add noon report'}), 500
 
 
 def _update_voyage_stats(voyage):
@@ -341,7 +341,7 @@ def get_voyage_performance(voyage_id):
                         'vessel_name': voyage.vessel.name if voyage.vessel else None,
                         'summary': summary, 'daily': daily})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -361,4 +361,4 @@ def get_voyage_claims(voyage_id):
                         'total_claims': len(claims),
                         'total_amount_usd': round(sum((c.estimated_impact_usd or 0) for c in claims), 2)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500

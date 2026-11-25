@@ -192,7 +192,7 @@ export default function WeatherIntelligencePage() {
           const Icon = t.icon
           return (
             <button key={t.key} onClick={() => { setActiveTab(t.key as any); if (windDirMap[t.key]) setScenario(s => ({ ...s, windDir: windDirMap[t.key] })) }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === t.key ? 'bg-teal-500/20 text-teal-400' : 'text-navy-400 hover:text-white'}`}>
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,transform] ${activeTab === t.key ? 'bg-teal-500/20 text-teal-400' : 'text-navy-400 hover:text-white'}`}>
               <Icon size={12} />{t.label}
             </button>
           )
@@ -226,11 +226,11 @@ export default function WeatherIntelligencePage() {
                   <label className="text-xs text-navy-400 block mb-2">Current Direction</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => setScenario(s => ({ ...s, currentFavorable: true }))}
-                      className={`py-2 rounded-xl text-xs font-medium transition-all ${scenario.currentFavorable ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-navy-800 text-navy-400 border border-transparent'}`}>
+                      className={`py-2 rounded-xl text-xs font-medium transition-[color,background-color,border-color,opacity,transform] ${scenario.currentFavorable ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-navy-800 text-navy-400 border border-transparent'}`}>
                       ↓ Favorable
                     </button>
                     <button onClick={() => setScenario(s => ({ ...s, currentFavorable: false }))}
-                      className={`py-2 rounded-xl text-xs font-medium transition-all ${!scenario.currentFavorable ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-navy-800 text-navy-400 border border-transparent'}`}>
+                      className={`py-2 rounded-xl text-xs font-medium transition-[color,background-color,border-color,opacity,transform] ${!scenario.currentFavorable ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-navy-800 text-navy-400 border border-transparent'}`}>
                       ↑ Against
                     </button>
                   </div>

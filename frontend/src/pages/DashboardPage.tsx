@@ -65,7 +65,6 @@ function KPICard({ title, value, unit, icon, color, trend, trendLabel, loading, 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5 }}
-      whileHover={{ scale: 1.02, y: -2 }}
       className={`glass-card p-5 rounded-2xl bg-gradient-to-br ${colorMap[color] || colorMap.teal} border cursor-default`}
     >
       <div className="flex items-start justify-between mb-3">
@@ -206,7 +205,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-display font-bold text-white">Fleet Intelligence Overview</h1>
           <p className="text-navy-400 text-sm mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
-        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleRefresh}
+        <motion.button whileTap={{ scale: 0.95 }} onClick={handleRefresh}
           className="flex items-center gap-2 px-4 py-2 bg-navy-700 hover:bg-navy-600 text-navy-300 rounded-xl text-sm transition-colors">
           <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
         </motion.button>
@@ -235,7 +234,7 @@ export default function DashboardPage() {
                 <span className="text-xs text-navy-400 w-32">{label}</span>
                 <div className="flex-1 bg-navy-800 rounded-full h-1.5">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${val}%` }} transition={{ delay: 0.8, duration: 0.8 }}
-                    className="h-1.5 rounded-full bg-gradient-to-r from-teal-500 to-ocean-500" />
+                    className="h-1.5 rounded-full bg-teal-500" />
                 </div>
                 <span className="text-xs text-navy-300 w-8">{val}%</span>
               </div>

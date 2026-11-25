@@ -16,8 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create uploads directory
-RUN mkdir -p uploads
+# Run as an unprivileged user
+RUN mkdir -p uploads && useradd --system --no-create-home app && chown -R app /app
+USER app
 
 # Environment variables
 ENV FLASK_ENV=production

@@ -83,7 +83,7 @@ export default function VesselsPage() {
           <p className="text-white/40 text-sm mt-1">{vessels.length} vessels registered</p>
         </div>
         <button onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-semibold text-sm shadow-glow-teal hover:opacity-90 transition-all">
+          className="flex items-center gap-2 px-4 py-2.5 bg-teal-500 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-[color,background-color,border-color,opacity,transform]">
           <Plus size={16} /> Add Vessel
         </button>
       </div>
@@ -109,7 +109,7 @@ export default function VesselsPage() {
           {filtered.map((v, i) => (
             <motion.div key={v.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
               onClick={() => navigate(`/vessels/${v.id}`)}
-              className="glass-card p-5 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-all group">
+              className="glass-card p-5 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-[color,background-color,border-color,opacity,transform] group">
               {/* Top row */}
               <div className="flex items-start justify-between mb-3">
                 <div>
@@ -268,11 +268,11 @@ export default function VesselsPage() {
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowForm(false)}
-                    className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 font-semibold hover:bg-white/10 transition-all">
+                    className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 font-semibold hover:bg-white/10 transition-[color,background-color,border-color,opacity,transform]">
                     Cancel
                   </button>
                   <button type="submit" disabled={saving}
-                    className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50">
+                    className="flex-1 py-3 bg-teal-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-[color,background-color,border-color,opacity,transform] disabled:opacity-50">
                     {saving ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
                     {saving ? 'Adding…' : 'Add Vessel'}
                   </button>

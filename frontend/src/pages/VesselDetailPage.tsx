@@ -95,7 +95,7 @@ export default function VesselDetailPage() {
                 <div key={key} className="flex items-center gap-3">
                   <span className="text-xs text-navy-400 w-36 capitalize">{key.replace('_', ' ')}</span>
                   <div className="flex-1 bg-navy-800 rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-gradient-to-r from-teal-500 to-ocean-500" style={{ width: `${(Number(val) / 25) * 100}%` }} />
+                    <div className="h-1.5 rounded-full bg-teal-500" style={{ width: `${(Number(val) / 25) * 100}%` }} />
                   </div>
                   <span className="text-xs text-white w-8">{Number(val).toFixed(0)}</span>
                 </div>

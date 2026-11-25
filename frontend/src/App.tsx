@@ -149,7 +149,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="flex items-center justify-between px-4 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3 overflow-hidden">
           {/* Anchor Icon */}
-          <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-teal-400/20 to-ocean-500/20 border border-teal-400/20 flex items-center justify-center glow-teal-sm">
+          <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-teal-400/20 border border-teal-400/20 flex items-center justify-center glow-teal-sm">
             <Anchor className="w-5 h-5 text-teal-400" />
           </div>
           <AnimatePresence mode="wait">
@@ -174,7 +174,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Toggle Button */}
         <button
           onClick={onToggle}
-          className="flex-shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center text-white/40 hover:text-teal-400 hover:bg-teal-400/10 hover:border-teal-400/20 transition-all duration-200"
+          className="flex-shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center text-white/40 hover:text-teal-400 hover:bg-teal-400/10 hover:border-teal-400/20 transition-[color,background-color,border-color,opacity,transform] duration-200"
         >
           {collapsed ? (
             <ChevronRight className="w-3.5 h-3.5" />
@@ -220,7 +220,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   relative flex items-center gap-3 rounded-xl px-3 py-2.5 cursor-pointer
                   transition-colors duration-200 group
                   ${isActive
-                    ? 'bg-gradient-to-r from-teal-400/15 to-ocean-500/10 text-teal-400'
+                    ? 'bg-teal-400/15 text-teal-400'
                     : 'text-white/50 hover:text-white/85 hover:bg-white/[0.04]'
                   }
                 `}
@@ -248,7 +248,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 <div className="relative flex-shrink-0">
                   <Icon
                     size={18}
-                    className={`transition-all duration-200 ${isActive ? 'text-teal-400' : ''} ${isHovered && !isActive ? 'text-white/80' : ''}`}
+                    className={`transition-[color,background-color,border-color,opacity,transform] duration-200 ${isActive ? 'text-teal-400' : ''} ${isHovered && !isActive ? 'text-white/80' : ''}`}
                   />
                   {item.badge && (
                     <span className="notification-badge">{item.badge}</span>
@@ -292,7 +292,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Bottom Actions */}
       <div className="p-2 space-y-0.5">
         {/* Notifications */}
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-all duration-200">
+        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-[color,background-color,border-color,opacity,transform] duration-200">
           <div className="relative flex-shrink-0">
             <Bell size={18} />
             <span className="notification-badge" style={{ background: '#ef4444' }}>3</span>
@@ -312,7 +312,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
 
         {/* Settings */}
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-all duration-200">
+        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-white/75 hover:bg-white/[0.04] transition-[color,background-color,border-color,opacity,transform] duration-200">
           <Settings size={18} className="flex-shrink-0" />
           <AnimatePresence>
             {!collapsed && (
@@ -333,7 +333,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="p-3 border-t border-white/[0.06]">
         <div className="flex items-center gap-3">
           {/* Avatar */}
-          <div className="flex-shrink-0 w-9 h-9 rounded-xl overflow-hidden border border-teal-400/20 bg-gradient-to-br from-teal-400/20 to-ocean-500/20 flex items-center justify-center">
+          <div className="flex-shrink-0 w-9 h-9 rounded-xl overflow-hidden border border-teal-400/20 bg-teal-400/20 flex items-center justify-center">
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
             ) : (
@@ -369,7 +369,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={handleLogout}
-                className="flex-shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/20 transition-all duration-200"
+                className="flex-shrink-0 w-7 h-7 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/20 transition-[color,background-color,border-color,opacity,transform] duration-200"
                 title="Logout"
               >
                 <LogOut className="w-3.5 h-3.5" />

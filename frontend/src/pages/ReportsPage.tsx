@@ -110,7 +110,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
                 {voyages.map(v => (
                   <button key={v.id} onClick={() => setSelected(v)}
-                    className={`text-left p-3 rounded-xl border transition-all ${selectedVoyage?.id === v.id
+                    className={`text-left p-3 rounded-xl border transition-[color,background-color,border-color,opacity,transform] ${selectedVoyage?.id === v.id
                       ? 'bg-teal-500/15 border-teal-500/40'
                       : 'bg-white/3 border-white/8 hover:border-white/20'}`}>
                     <div className="flex items-center gap-2 mb-1">
@@ -136,7 +136,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-3 gap-3">
               {FORMATS.map(f => (
                 <button key={f.id} onClick={() => setFormat(f.id as Format)}
-                  className={`p-4 rounded-xl border text-left transition-all ${format === f.id ? f.bg : 'bg-white/3 border-white/8 hover:border-white/20'}`}>
+                  className={`p-4 rounded-xl border text-left transition-[color,background-color,border-color,opacity,transform] ${format === f.id ? f.bg : 'bg-white/3 border-white/8 hover:border-white/20'}`}>
                   <f.icon size={20} className={f.color} />
                   <p className="text-white text-sm font-semibold mt-2">{f.label}</p>
                   <p className="text-white/40 text-xs mt-1 leading-relaxed">{f.desc}</p>
@@ -153,9 +153,8 @@ export default function ReportsPage() {
               Generate & Download
             </h2>
             <button onClick={handleDownload} disabled={loading || !selectedVoyage}
-              className="w-full py-4 bg-gradient-to-r from-teal-500 to-ocean-500 hover:from-teal-400 hover:to-ocean-400
-                         disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white font-bold text-base
-                         flex items-center justify-center gap-3 transition-all shadow-glow-teal">
+              className="w-full py-4 bg-teal-500 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-white font-bold text-base
+                         flex items-center justify-center gap-3 transition-[color,background-color,border-color,opacity,transform]">
               {loading ? <Loader size={20} className="animate-spin" /> : <Download size={20} />}
               {loading ? 'Generating Report…' : `Download ${format.toUpperCase()} Report`}
             </button>

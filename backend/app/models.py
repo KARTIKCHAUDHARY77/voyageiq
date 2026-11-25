@@ -486,3 +486,14 @@ class ReportUpload(db.Model):
             'errors': self.errors,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class TokenBlocklist(db.Model):
+    """JWT IDs that were revoked (logout, password change)."""
+    __tablename__ = 'token_blocklist'
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    token_type = db.Column(db.String(16))
+    user_id = db.Column(db.String(36), index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

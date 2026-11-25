@@ -26,8 +26,9 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         try {
           const res = await authAPI.login(email, password)
-          const { access_token, user } = res.data
+          const { access_token, refresh_token, user } = res.data
           localStorage.setItem('voyageiq_token', access_token)
+          if (refresh_token) localStorage.setItem('voyageiq_refresh', refresh_token)
           set({ user, token: access_token, isLoading: false })
         } catch (err: any) {
           set({ error: err.response?.data?.error || 'Login failed', isLoading: false })
@@ -36,7 +37,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Revoke server-side (best effort), then clear local state.
+        authAPI.logout(localStorage.getItem('voyageiq_refresh')).catch(() => {})
         localStorage.removeItem('voyageiq_token')
+        localStorage.removeItem('voyageiq_refresh')
         set({ user: null, token: null })
       },
 
@@ -48,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
           set({ user: res.data, token })
         } catch {
           localStorage.removeItem('voyageiq_token')
+          localStorage.removeItem('voyageiq_refresh')
           set({ user: null, token: null })
         }
       },
@@ -56,7 +61,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'voyageiq-auth',
-      partialize: (state) => ({ token: state.token }),
+      partialize: () => ({}),
     }
   )
 )

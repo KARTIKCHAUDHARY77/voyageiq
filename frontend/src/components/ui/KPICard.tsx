@@ -172,7 +172,6 @@ export default function KPICard({
 
   return (
     <motion.div
-      whileHover={{ scale: 1.025 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       onHoverStart={() => setHovered(true)}
@@ -182,15 +181,8 @@ export default function KPICard({
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: hovered ? palette.glowShadow : '0 4px 24px rgba(0,0,0,0.4)',
       }}
-      className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5 overflow-hidden transition-shadow duration-300"
+      className="relative bg-navy-800 border border-white/10 rounded-xl p-5 overflow-hidden"
     >
-      {/* Background glow blob */}
-      <motion.div
-        animate={{ opacity: hovered ? 1 : 0 }}
-        transition={{ duration: 0.3 }}
-        className="absolute -top-8 -right-8 w-32 h-32 rounded-full blur-3xl pointer-events-none"
-        style={{ background: palette.glow }}
-      />
 
       {/* Top row: title + icon */}
       <div className="relative flex items-start justify-between mb-4">

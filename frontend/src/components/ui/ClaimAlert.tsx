@@ -253,7 +253,6 @@ export default function ClaimAlert({
           <div className="flex items-center gap-2">
             {onDismiss && (
               <motion.button
-                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onDismiss(id)}
                 className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
@@ -263,7 +262,6 @@ export default function ClaimAlert({
             )}
             {onApprove && status === 'under_review' && (
               <motion.button
-                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onApprove(id)}
                 className="text-xs font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 px-3 py-1 rounded-lg transition-colors"
@@ -273,7 +271,6 @@ export default function ClaimAlert({
             )}
             {onView && (
               <motion.button
-                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onView(id)}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 px-3 py-1 rounded-lg transition-colors"

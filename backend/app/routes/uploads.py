@@ -375,6 +375,20 @@ def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str
 # Routes
 # ---------------------------------------------------------------------------
 
+def _content_matches(ftype, data):
+    """Check magic bytes so a renamed executable or HTML file is not parsed."""
+    if ftype == 'pdf':
+        return data[:5] == b'%PDF-'
+    if ftype == 'excel':
+        return data[:4] == b'PK\x03\x04' or data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+    if ftype == 'csv':
+        if b'\x00' in data[:4096]:
+            return False
+        head = data[:1024].lstrip().lower()
+        return not (head.startswith(b'<') or head.startswith(b'mz'))
+    return False
+
+
 @uploads_bp.route('/report', methods=['POST'])
 @jwt_required()
 def upload_report():
@@ -408,6 +422,8 @@ def upload_report():
         filename = secure_filename(file.filename)
         ftype = _file_type(filename)
         file_bytes = file.read()
+        if not _content_matches(ftype, file_bytes):
+            return jsonify({'success': False, 'error': 'File content does not match its extension.'}), 400
 
         # ---- Parse -------------------------------------------------------- #
         records, parse_errors = [], []

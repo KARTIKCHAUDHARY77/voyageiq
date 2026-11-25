@@ -12,8 +12,13 @@ from sqlalchemy import func
 
 from ..models import Vessel, Voyage, NoonReport, VesselPosition
 from ..extensions import db
+from ..security import roles_required, FLEET_WRITE_ROLES
 
 vessels_bp = Blueprint('vessels', __name__)
+
+NUMERIC_VESSEL_FIELDS = {'built_year', 'gross_tonnage', 'deadweight_tonnage', 'loa', 'beam',
+                         'draft_design', 'main_engine_power', 'design_speed',
+                         'warranted_speed', 'warranted_consumption'}
 
 # ---------------------------------------------------------------------------
 # Health score helper
@@ -144,7 +149,7 @@ def list_vessels():
             'per_page': per_page,
         })
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve vessels', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve vessels'}), 500
 
 
 @vessels_bp.route('/<vessel_id>', methods=['GET'])
@@ -177,11 +182,12 @@ def get_vessel(vessel_id):
 
         return jsonify(data)
     except Exception as e:
-        return jsonify({'error': 'Failed to retrieve vessel', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve vessel'}), 500
 
 
 @vessels_bp.route('', methods=['POST'])
 @jwt_required()
+@roles_required(*FLEET_WRITE_ROLES)
 def create_vessel():
     """Create a new vessel — accepts the exact fields the Vessel model uses."""
     try:
@@ -216,6 +222,7 @@ def create_vessel():
             warranted_consumption=float(data['warranted_consumption']) if data.get('warranted_consumption') else None,
             classification_society=data.get('classification_society', 'DNV GL'),
             status=data.get('status', 'active'),
+            owner_id=get_jwt_identity(),
         )
 
         db.session.add(vessel)
@@ -224,11 +231,12 @@ def create_vessel():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to create vessel', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create vessel'}), 500
 
 
 @vessels_bp.route('/<vessel_id>', methods=['PUT'])
 @jwt_required()
+@roles_required(*FLEET_WRITE_ROLES)
 def update_vessel(vessel_id):
     try:
         vessel = Vessel.query.get(vessel_id)
@@ -240,14 +248,22 @@ def update_vessel(vessel_id):
                       'loa','beam','draft_design','main_engine_type','main_engine_power',
                       'design_speed','warranted_speed','warranted_consumption','classification_society','status']:
             if field in data:
-                setattr(vessel, field, data[field])
+                value = data[field]
+                if field in NUMERIC_VESSEL_FIELDS and value not in (None, ''):
+                    try:
+                        value = float(value)
+                    except (TypeError, ValueError):
+                        return jsonify({'error': f'{field} must be a number'}), 400
+                elif field not in NUMERIC_VESSEL_FIELDS and value is not None and not isinstance(value, (str, int)):
+                    return jsonify({'error': f'{field} is invalid'}), 400
+                setattr(vessel, field, value if value != '' else None)
 
         vessel.updated_at = datetime.utcnow()
         db.session.commit()
         return jsonify(vessel.to_dict())
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Failed to update vessel', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to update vessel'}), 500
 
 
 @vessels_bp.route('/<vessel_id>/positions', methods=['GET'])
@@ -282,7 +298,7 @@ def get_vessel_positions(vessel_id):
         return jsonify({'vessel_id': vessel_id, 'vessel_name': vessel.name,
                         'positions': positions_data, 'count': len(positions_data)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 @vessels_bp.route('/<vessel_id>/performance', methods=['GET'])
@@ -318,7 +334,7 @@ def get_vessel_performance(vessel_id):
         ]
         return jsonify(metrics)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500
 
 
 @vessels_bp.route('/<vessel_id>/health', methods=['GET'])
@@ -338,4 +354,4 @@ def get_vessel_health(vessel_id):
         health['vessel_name'] = vessel.name
         return jsonify(health)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Request failed'}), 500

@@ -215,15 +215,15 @@ export default function NoonReportPage() {
         {selectedVoyage && (
           <div className="flex gap-2 flex-shrink-0">
             <button onClick={() => handleDownloadReport('pdf')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 border border-red-500/25 text-red-400 text-xs rounded-xl hover:bg-red-500/25 transition-all">
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 border border-red-500/25 text-red-400 text-xs rounded-xl hover:bg-red-500/25 transition-[color,background-color,border-color,opacity,transform]">
               <Download size={12} /> PDF
             </button>
             <button onClick={() => handleDownloadReport('excel')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/15 border border-green-500/25 text-green-400 text-xs rounded-xl hover:bg-green-500/25 transition-all">
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/15 border border-green-500/25 text-green-400 text-xs rounded-xl hover:bg-green-500/25 transition-[color,background-color,border-color,opacity,transform]">
               <Download size={12} /> Excel
             </button>
             <button onClick={() => handleDownloadReport('csv')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-400 text-xs rounded-xl hover:bg-blue-500/25 transition-all">
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-400 text-xs rounded-xl hover:bg-blue-500/25 transition-[color,background-color,border-color,opacity,transform]">
               <Download size={12} /> CSV
             </button>
           </div>
@@ -244,7 +244,7 @@ export default function NoonReportPage() {
           <div className="flex gap-2">
             {(['manual','upload'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === t
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-[color,background-color,border-color,opacity,transform] ${tab === t
                   ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300'
                   : 'bg-white/5 border border-white/10 text-white/50 hover:text-white'}`}>
                 {t === 'manual' ? '📝 Manual Entry' : '📁 Import File'}
@@ -279,7 +279,7 @@ export default function NoonReportPage() {
                 </div>
 
                 <label className="block cursor-pointer">
-                  <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all
+                  <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-[color,background-color,border-color,opacity,transform]
                     ${uploadFile ? 'border-teal-500/50 bg-teal-500/5' : 'border-white/10 hover:border-white/30 hover:bg-white/2'}`}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f) }}>
@@ -332,7 +332,7 @@ export default function NoonReportPage() {
                 )}
 
                 <button onClick={handleUpload} disabled={!uploadFile || uploading || !selectedVoyage}
-                  className="w-full py-3 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:opacity-90 transition-all">
+                  className="w-full py-3 bg-teal-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:opacity-90 transition-[color,background-color,border-color,opacity,transform]">
                   {uploading ? <Loader size={16} className="animate-spin" /> : <Upload size={16} />}
                   {uploading ? 'Processing & Importing…' : 'Import Records'}
                 </button>
@@ -413,7 +413,7 @@ export default function NoonReportPage() {
               </div>
 
               <button type="submit" disabled={saving || !selectedVoyage}
-                className="w-full py-4 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 disabled:opacity-40 hover:opacity-90 transition-all shadow-glow-teal">
+                className="w-full py-4 bg-teal-500 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 disabled:opacity-40 hover:opacity-90 transition-[color,background-color,border-color,opacity,transform]">
                 {saving ? <Loader size={20} className="animate-spin" /> : <Plus size={20} />}
                 {saving ? 'Saving…' : 'Save Noon Report'}
               </button>
@@ -464,7 +464,7 @@ export default function NoonReportPage() {
             <div className="space-y-2">
               {(['pdf','excel','csv'] as const).map(fmt => (
                 <button key={fmt} onClick={() => handleDownloadReport(fmt)} disabled={!selectedVoyage}
-                  className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-30
+                  className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-[color,background-color,border-color,opacity,transform] disabled:opacity-30
                     ${fmt === 'pdf'   ? 'bg-red-500/15 border border-red-500/25 text-red-400 hover:bg-red-500/25' :
                       fmt === 'excel' ? 'bg-green-500/15 border border-green-500/25 text-green-400 hover:bg-green-500/25' :
                                         'bg-blue-500/15 border border-blue-500/25 text-blue-400 hover:bg-blue-500/25'}`}>

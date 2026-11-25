@@ -95,7 +95,7 @@ export default function VoyagesPage() {
           <p className="text-white/40 text-sm mt-1">{voyages.length} voyages total</p>
         </div>
         <button onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-semibold text-sm shadow-glow-teal hover:opacity-90 transition-all">
+          className="flex items-center gap-2 px-4 py-2.5 bg-teal-500 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-[color,background-color,border-color,opacity,transform]">
           <Plus size={16} /> New Voyage
         </button>
       </div>
@@ -120,11 +120,11 @@ export default function VoyagesPage() {
           {filtered.map((v, i) => (
             <motion.div key={v.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
               onClick={() => navigate(`/voyages/${v.id}`)}
-              className="glass-card p-4 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-all group flex items-center gap-4">
+              className="glass-card p-4 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-[color,background-color,border-color,opacity,transform] group flex items-center gap-4">
               {/* Route indicator */}
               <div className="flex-shrink-0 hidden sm:flex flex-col items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-teal-400" />
-                <div className="w-0.5 h-8 bg-gradient-to-b from-teal-400 to-ocean-400" />
+                <div className="w-0.5 h-8 bg-teal-400" />
                 <div className="w-2 h-2 rounded-full bg-ocean-400" />
               </div>
 
@@ -273,11 +273,11 @@ export default function VoyagesPage() {
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowForm(false)}
-                    className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 font-semibold hover:bg-white/10 transition-all">
+                    className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 font-semibold hover:bg-white/10 transition-[color,background-color,border-color,opacity,transform]">
                     Cancel
                   </button>
                   <button type="submit" disabled={saving}
-                    className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-ocean-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50">
+                    className="flex-1 py-3 bg-teal-500 rounded-xl text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50">
                     {saving ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
                     {saving ? 'Creating…' : 'Create Voyage'}
                   </button>

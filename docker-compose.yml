@@ -8,12 +8,11 @@ services:
     environment:
       POSTGRES_DB: voyageiq_db
       POSTGRES_USER: voyageiq
-      POSTGRES_PASSWORD: voyageiq123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-    ports:
-      - "5432:5432"
+    # Not published to the host: only the backend container needs the database.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voyageiq -d voyageiq_db"]
       interval: 10s
@@ -30,15 +29,15 @@ services:
     container_name: voyageiq_backend
     environment:
       FLASK_ENV: production
-      DATABASE_URL: postgresql://voyageiq:voyageiq123@postgres:5432/voyageiq_db
-      SECRET_KEY: ${SECRET_KEY:-voyageiq-super-secret-key-2024}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-voyageiq-jwt-secret-2024}
+      DATABASE_URL: postgresql://voyageiq:${POSTGRES_PASSWORD}@postgres:5432/voyageiq_db
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://frontend:3000
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
     volumes:
       - uploads_data:/app/uploads
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     depends_on:
       postgres:
         condition: service_healthy

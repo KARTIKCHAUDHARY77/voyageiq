@@ -164,7 +164,7 @@ export default function VoyageOptimizerPage() {
                 </select>
               </div>
               <div className="flex justify-center">
-                <div className="w-0.5 h-5 bg-gradient-to-b from-teal-400 to-ocean-400 rounded-full" />
+                <div className="w-0.5 h-5 bg-teal-400 rounded-full" />
               </div>
               <div>
                 <label className="text-white/40 text-xs mb-1 block">Destination Port</label>
@@ -212,7 +212,7 @@ export default function VoyageOptimizerPage() {
                   className="maritime-input" placeholder="60000" />
                 {form.dwt > 0 && (
                   <div className="mt-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-teal-400 to-ocean-400 rounded-full transition-all"
+                    <div className="h-full bg-teal-400 rounded-full transition-[color,background-color,border-color,opacity,transform]"
                       style={{ width: `${Math.min(100, (Number(form.cargo_weight)/Number(form.dwt))*100)}%` }} />
                   </div>
                 )}
@@ -333,9 +333,7 @@ export default function VoyageOptimizerPage() {
 
           {/* Calculate Button */}
           <button onClick={handleCalculate} disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-teal-500 to-ocean-500 hover:from-teal-400 hover:to-ocean-400
-              disabled:opacity-50 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3
-              shadow-glow-teal transition-all">
+            className="w-full py-4 bg-teal-500 hover:opacity-90 disabled:opacity-50 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 transition-[color,background-color,border-color,opacity,transform]">
             {loading ? <Loader size={22} className="animate-spin" /> : <Zap size={22} />}
             {loading ? 'Calculating…' : 'Calculate Voyage'}
           </button>
@@ -542,7 +540,7 @@ export default function VoyageOptimizerPage() {
                 {/* Route Options & Save/Export */}
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={handleCalculate} disabled={loading}
-                    className="py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-white/70 font-semibold text-sm flex items-center justify-center gap-2 transition-all">
+                    className="py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-white/70 font-semibold text-sm flex items-center justify-center gap-2 transition-[color,background-color,border-color,opacity,transform]">
                     <RefreshCw size={15} /> Recalculate
                   </button>
                   <button
@@ -552,7 +550,7 @@ export default function VoyageOptimizerPage() {
                         toast.success('Export calculation as PDF — use Reports page to download voyage reports')
                       } catch {}
                     }}
-                    className="py-3 bg-gradient-to-r from-teal-600/60 to-ocean-600/60 border border-teal-500/30 hover:from-teal-500/60 hover:to-ocean-500/60 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all">
+                    className="py-3 bg-teal-600/60 border border-teal-500/30 hover:opacity-90 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-[color,background-color,border-color,opacity,transform]">
                     <Download size={15} /> Export Report
                   </button>
                 </div>

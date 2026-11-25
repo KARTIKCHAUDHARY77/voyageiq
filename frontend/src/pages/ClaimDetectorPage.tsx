@@ -210,13 +210,13 @@ const ClaimCard: React.FC<ClaimCardProps> = ({ claim, onUpdateStatus }) => {
                   <>
                     <button
                       onClick={() => onUpdateStatus(claim.id, 'acknowledged')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-teal-400 text-xs font-medium rounded-lg transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-teal-400 text-xs font-medium rounded-lg transition-[color,background-color,border-color,opacity,transform]"
                     >
                       <CheckCircle className="w-3.5 h-3.5" /> Acknowledge
                     </button>
                     <button
                       onClick={() => onUpdateStatus(claim.id, 'disputed')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-warning-500/20 hover:bg-warning-500/30 border border-warning-500/30 text-warning-400 text-xs font-medium rounded-lg transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-warning-500/20 hover:bg-warning-500/30 border border-warning-500/30 text-warning-400 text-xs font-medium rounded-lg transition-[color,background-color,border-color,opacity,transform]"
                     >
                       <XCircle className="w-3.5 h-3.5" /> Dispute
                     </button>
@@ -225,12 +225,12 @@ const ClaimCard: React.FC<ClaimCardProps> = ({ claim, onUpdateStatus }) => {
                 {(claim.status === 'open' || claim.status === 'acknowledged') && (
                   <button
                     onClick={() => onUpdateStatus(claim.id, 'resolved')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-success-500/20 hover:bg-success-500/30 border border-success-500/30 text-success-400 text-xs font-medium rounded-lg transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-success-500/20 hover:bg-success-500/30 border border-success-500/30 text-success-400 text-xs font-medium rounded-lg transition-[color,background-color,border-color,opacity,transform]"
                   >
                     <CheckCircle className="w-3.5 h-3.5" /> Resolve
                   </button>
                 )}
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 text-xs font-medium rounded-lg transition-all">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 text-xs font-medium rounded-lg transition-[color,background-color,border-color,opacity,transform]">
                   <Eye className="w-3.5 h-3.5" /> View Details
                 </button>
               </div>
@@ -396,7 +396,7 @@ export default function ClaimDetectorPage() {
           </h1>
           <p className="text-white/40 text-sm mt-1">AI-powered charter party claim detection & management</p>
         </div>
-        <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 text-sm rounded-xl transition-all">
+        <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 text-sm rounded-xl transition-[color,background-color,border-color,opacity,transform]">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </motion.div>
@@ -431,7 +431,7 @@ export default function ClaimDetectorPage() {
               <button
                 onClick={handleDetect}
                 disabled={detecting || !selectedVoyage}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-ocean-500 hover:from-teal-500 hover:to-ocean-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all shadow-glow-teal"
+                className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-[color,background-color,border-color,opacity,transform]"
               >
                 {detecting ? (
                   <><RefreshCw className="w-4 h-4 animate-spin" /> Detecting…</>
@@ -451,7 +451,7 @@ export default function ClaimDetectorPage() {
                   </div>
                   <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
                     <motion.div
-                      className="h-full bg-gradient-to-r from-teal-500 to-ocean-500 rounded-full"
+                      className="h-full bg-teal-500 rounded-full"
                       animate={{ width: ['10%', '90%'] }}
                       transition={{ duration: 3, ease: 'easeInOut' }}
                     />
@@ -468,7 +468,7 @@ export default function ClaimDetectorPage() {
                 <button
                   key={tab.key}
                   onClick={() => setFilterTab(tab.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filterTab === tab.key ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-white/50 hover:text-white/70'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,transform] ${filterTab === tab.key ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-white/50 hover:text-white/70'}`}
                 >
                   {tab.label}
                   <span className="ml-1.5 opacity-70">({tab.count})</span>

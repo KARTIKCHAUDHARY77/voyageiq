@@ -13,6 +13,7 @@ import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..security import limiter
 
 from app.extensions import db
 from app.models import (
@@ -422,6 +423,7 @@ def _call_openai(system_prompt: str, history: list, user_message: str, api_key: 
 
 @copilot_bp.route('/chat', methods=['POST'])
 @jwt_required()
+@limiter.limit('20 per minute')
 def chat():
     """
     POST /api/copilot/chat
@@ -438,6 +440,8 @@ def chat():
 
         if not user_message:
             return jsonify({'success': False, 'error': 'message is required.'}), 400
+        if len(user_message) > 4000:
+            return jsonify({'success': False, 'error': 'message is too long (max 4000 characters).'}), 400
 
         # ---- Load or create conversation --------------------------------- #
         if conversation_id:

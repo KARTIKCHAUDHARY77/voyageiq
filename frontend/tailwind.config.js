@@ -7,18 +7,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Maritime Navy Palette
+        // Maritime Navy Palette (600-950 are surfaces; 100-500 are text tones)
         navy: {
           950: '#020B18',
           900: '#040F1F',
           800: '#071628',
           700: '#0A1F3A',
           600: '#0E2847',
-          500: '#122F52',
-          400: '#1A3F6B',
-          300: '#234F84',
-          200: '#2B5F9D',
-          100: '#3C7AB8',
+          500: '#6a7f9c',
+          400: '#7d92ae',
+          300: '#9aacc4',
+          200: '#b5c3d7',
+          100: '#d0d9e6',
         },
         ocean: {
           900: '#032B41',
@@ -62,9 +62,9 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['IBM Plex Sans', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['IBM Plex Sans', 'Inter', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'JetBrains Mono', 'monospace'],
       },
       backgroundImage: {
         'maritime-gradient': 'linear-gradient(135deg, #020B18 0%, #040F1F 30%, #071628 60%, #0A1F3A 100%)',
@@ -74,22 +74,22 @@ export default {
         'card-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
       },
       boxShadow: {
-        'glow-teal': '0 0 30px rgba(20, 184, 166, 0.3)',
-        'glow-ocean': '0 0 30px rgba(14, 165, 233, 0.3)',
-        'glow-danger': '0 0 20px rgba(239, 68, 68, 0.4)',
+        'glow-teal': 'none',
+        'glow-ocean': 'none',
+        'glow-danger': 'none',
         'card': '0 4px 24px rgba(0, 0, 0, 0.4)',
         'card-hover': '0 8px 40px rgba(0, 0, 0, 0.6)',
         'glass': '0 8px 32px rgba(0, 0, 0, 0.3)',
       },
       animation: {
-        'float': 'float 6s ease-in-out infinite',
+        'float': 'none',
         'pulse-slow': 'pulse 3s ease-in-out infinite',
         'shimmer': 'shimmer 2s linear infinite',
         'spin-slow': 'spin 8s linear infinite',
-        'wave': 'wave 3s ease-in-out infinite',
-        'slide-up': 'slideUp 0.5s ease-out',
-        'fade-in': 'fadeIn 0.4s ease-out',
-        'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+        'wave': 'none',
+        'slide-up': 'slideUp 0.25s cubic-bezier(0.23, 1, 0.32, 1)',
+        'fade-in': 'fadeIn 0.2s cubic-bezier(0.23, 1, 0.32, 1)',
+        'glow-pulse': 'none',
       },
       keyframes: {
         float: {
@@ -105,7 +105,7 @@ export default {
           '50%': { transform: 'rotate(3deg)' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         fadeIn: {
