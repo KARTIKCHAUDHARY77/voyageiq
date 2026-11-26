@@ -110,7 +110,8 @@ def create_app(config_name=None):
     def health():
         return {'status': 'healthy'}
 
-    migrate.init_app(app, db)
+    # render_as_batch: migrations also run on SQLite (tests), which cannot ALTER constraints.
+    migrate.init_app(app, db, render_as_batch=True)
 
     @app.cli.command('bootstrap')
     def bootstrap_command():

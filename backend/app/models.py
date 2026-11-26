@@ -18,6 +18,14 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+def _org_fk(table):
+    """Owning organization. Nullable until every route is tenant-scoped (see migrations).
+
+    The constraint is named so a migration can drop it again (downgrade).
+    """
+    return db.Column(db.String(36), db.ForeignKey('organizations.id', name=f'fk_{table}_organization_id'), index=True)
+
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -55,6 +63,7 @@ class Vessel(db.Model):
     __tablename__ = 'vessels'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('vessels')
     imo_number = db.Column(db.String(20), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     vessel_type = db.Column(db.String(100), nullable=False)
@@ -109,6 +118,7 @@ class Voyage(db.Model):
     __tablename__ = 'voyages'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('voyages')
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'), nullable=False)
     voyage_number = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(50), default='in_progress')
@@ -176,6 +186,7 @@ class NoonReport(db.Model):
     __tablename__ = 'noon_reports'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('noon_reports')
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'), nullable=False)
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'), nullable=False)
     report_date = db.Column(db.Date, nullable=False)
@@ -282,6 +293,7 @@ class Claim(db.Model):
     __tablename__ = 'claims'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('claims')
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'), nullable=False)
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'), nullable=False)
     claim_type = db.Column(db.String(100), nullable=False)
@@ -328,6 +340,7 @@ class FuelAnalytic(db.Model):
     __tablename__ = 'fuel_analytics'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('fuel_analytics')
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'), nullable=False)
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'))
     period_date = db.Column(db.Date, nullable=False)
@@ -370,6 +383,7 @@ class VesselPosition(db.Model):
     __tablename__ = 'vessel_positions'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('vessel_positions')
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'), nullable=False)
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'))
     timestamp = db.Column(db.DateTime, nullable=False)
@@ -397,6 +411,7 @@ class Route(db.Model):
     __tablename__ = 'routes'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('routes')
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'))
     origin_port = db.Column(db.String(255), nullable=False)
     destination_port = db.Column(db.String(255), nullable=False)
@@ -433,6 +448,7 @@ class CopilotConversation(db.Model):
     __tablename__ = 'copilot_conversations'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('copilot_conversations')
     user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'))
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'))
@@ -464,6 +480,7 @@ class ReportUpload(db.Model):
     __tablename__ = 'report_uploads'
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = _org_fk('report_uploads')
     vessel_id = db.Column(db.String(36), db.ForeignKey('vessels.id'))
     voyage_id = db.Column(db.String(36), db.ForeignKey('voyages.id'))
     uploaded_by = db.Column(db.String(36), db.ForeignKey('users.id'))
@@ -497,3 +514,84 @@ class TokenBlocklist(db.Model):
     token_type = db.Column(db.String(16))
     user_id = db.Column(db.String(36), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Multi-tenancy
+# ---------------------------------------------------------------------------
+
+# Roles inside one organization. Permissions per role live in app/tenancy.py.
+ORG_ROLES = ('owner', 'admin', 'fleet_manager', 'analyst', 'operator', 'viewer')
+MEMBER_STATUSES = ('active', 'invited', 'suspended')
+
+
+class Organization(db.Model):
+    """A customer company. All operational data belongs to exactly one organization."""
+    __tablename__ = 'organizations'
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    name = db.Column(db.String(255), nullable=False)
+    legal_name = db.Column(db.String(255))
+    company_email = db.Column(db.String(255))
+    country = db.Column(db.String(100))
+    subscription_plan = db.Column(db.String(50), nullable=False, default='trial')
+    status = db.Column(db.String(30), nullable=False, default='active')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    members = db.relationship('OrganizationMember', backref='organization', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'name': self.name, 'legal_name': self.legal_name,
+            'company_email': self.company_email, 'country': self.country,
+            'subscription_plan': self.subscription_plan, 'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class OrganizationMember(db.Model):
+    """A user's membership (and role) in one organization. A user can belong to several."""
+    __tablename__ = 'organization_members'
+    __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = db.Column(db.String(36), db.ForeignKey('organizations.id'), nullable=False, index=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    role = db.Column(db.String(30), nullable=False, default='viewer')
+    status = db.Column(db.String(30), nullable=False, default='active')
+    invited_at = db.Column(db.DateTime)
+    joined_at = db.Column(db.DateTime)
+
+    user = db.relationship('User', backref=db.backref('memberships', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'organization_id': self.organization_id, 'user_id': self.user_id,
+            'role': self.role, 'status': self.status,
+            'invited_at': self.invited_at.isoformat() if self.invited_at else None,
+            'joined_at': self.joined_at.isoformat() if self.joined_at else None,
+        }
+
+
+class AuditLog(db.Model):
+    """Append-only record of security-relevant actions. Rows are never updated."""
+    __tablename__ = 'audit_logs'
+    __table_args__ = (db.Index('ix_audit_org_created', 'organization_id', 'created_at'),)
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    organization_id = db.Column(db.String(36), db.ForeignKey('organizations.id'), index=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), index=True)
+    action = db.Column(db.String(100), nullable=False)
+    entity_type = db.Column(db.String(60))
+    entity_id = db.Column(db.String(36))
+    details = db.Column(db.JSON)
+    ip_address = db.Column(db.String(64))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'organization_id': self.organization_id, 'user_id': self.user_id,
+            'action': self.action, 'entity_type': self.entity_type, 'entity_id': self.entity_id,
+            'details': self.details, 'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
