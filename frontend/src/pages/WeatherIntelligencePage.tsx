@@ -29,6 +29,11 @@ const BEAUFORT: Array<{ force: number; name: string; wind: string; waves: string
 
 const RISK_TONE: Record<string, Tone> = { LOW: 'ok', MODERATE: 'warn', HIGH: 'alert', SEVERE: 'alert', EXTREME: 'alert' }
 
+// How complete the provider's answer was. "Unavailable" means no assessment, never good weather.
+const DATA_STATUS: Record<string, string> = {
+  available: 'Data available', partial: 'Partly available', stale: 'Out of date', unavailable: 'Unavailable',
+}
+
 interface Scenario { windSpeed: string; windDir: 'head' | 'tail' | 'cross'; wave: string; swell: string; current: string; favourable: boolean; baseSpeed: string; baseFuel: string }
 const DEFAULT: Scenario = { windSpeed: '20', windDir: 'head', wave: '2', swell: '1', current: '0', favourable: false, baseSpeed: '14', baseFuel: '28' }
 
@@ -191,7 +196,16 @@ function ConditionsPanel({ vessels }: { vessels: any[] }) {
       {error && <p role="alert" className="mt-3 text-body text-signal-port">{error}</p>}
       {data && (
         <div className="mt-4 space-y-3" aria-live="polite">
-          <div className="flex items-center gap-2"><Badge tone={RISK_TONE[data.risk_level] ?? 'neutral'}>{data.risk_level}</Badge><span className="text-label text-fg-subtle">Open-Meteo, Beaufort {data.beaufort_scale}</span></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={data.risk_level ? (RISK_TONE[data.risk_level] ?? 'neutral') : 'neutral'}>{data.risk_level ?? 'No assessment'}</Badge>
+            <span className="text-label text-fg-subtle">
+              {data.provider ?? 'Open-Meteo'} · {DATA_STATUS[data.data_status?.overall] ?? 'Status unknown'}
+              {data.beaufort_scale != null && ` · Beaufort ${data.beaufort_scale}`}
+            </span>
+          </div>
+          <p className="text-label text-fg-muted tabular-nums">
+            Wind {num(data.wind_speed_knots, 1) ?? '–'} kn · waves {num(data.wave_height_m, 1) ?? '–'} m · swell {num(data.swell_height_m, 1) ?? '–'} m · current {num(data.ocean_current_velocity_ms, 2) ?? '–'} m/s
+          </p>
           <ul className="space-y-1.5">{(data.recommendations ?? []).map((r: string, i: number) => <li key={i} className="text-body text-fg-muted">{r}</li>)}</ul>
         </div>
       )}

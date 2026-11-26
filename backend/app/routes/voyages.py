@@ -234,12 +234,18 @@ def add_noon_report(voyage_id):
 
         def parse_time(v):
             if not v: return None
-            try: return datetime.strptime(str(v)[:8], '%H:%M:%S').time()
-            except: return None
+            for fmt in ('%H:%M:%S', '%H:%M'):
+                try: return datetime.strptime(str(v)[:8], fmt).time()
+                except ValueError: continue
+            return None
 
         report_day = parse_date(data.get('report_date'))
         if report_day is None:
             return jsonify({'error': 'Please fix the highlighted fields', 'fields': {'report_date': 'Use the format YYYY-MM-DD'}}), 400
+        report_time = parse_time(data.get('report_time'))
+        if data.get('report_time') not in (None, '') and report_time is None:
+            return jsonify({'error': 'Please fix the highlighted fields',
+                            'fields': {'report_time': 'Use the format HH:MM or HH:MM:SS'}}), 400
         duplicate = scoped_query(NoonReport).filter_by(
             voyage_id=voyage_id, report_date=report_day, report_type=data.get('report_type', 'noon')).first()
         if duplicate:
@@ -253,7 +259,7 @@ def add_noon_report(voyage_id):
             vessel_id=voyage.vessel_id,   # required NOT NULL
             # Date/time
             report_date=parse_date(data.get('report_date')),
-            report_time=parse_time(data.get('report_time')) or datetime.utcnow().time(),
+            report_time=report_time,   # None when not supplied; never the current clock time
             report_type=data.get('report_type', 'noon'),
             # Position
             latitude=_safe_float(data.get('latitude')),

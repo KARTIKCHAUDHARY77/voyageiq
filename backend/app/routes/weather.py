@@ -13,6 +13,10 @@ import math
 import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
+from app.services.weather_data import (
+    PROVIDER, UNAVAILABLE, beaufort_from_kmh, daily_value, kmh_to_knots, recommendations,
+    risk_level, summarize,
+)
 from app.tenancy import tenant_required
 
 weather_bp = Blueprint('weather', __name__)
@@ -28,48 +32,24 @@ REQUEST_TIMEOUT = 10  # seconds
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _beaufort_from_kmh(wind_speed_kmh: float) -> int:
-    """Convert wind speed (km/h) to Beaufort scale."""
-    thresholds = [1, 5, 11, 19, 28, 38, 49, 61, 74]
-    for bf, thr in enumerate(thresholds):
-        if wind_speed_kmh <= thr:
-            return bf
-    return 9
+def _beaufort_from_kmh(wind_speed_kmh):
+    return beaufort_from_kmh(wind_speed_kmh)
 
 
-def _kmh_to_knots(kmh: float) -> float:
-    return round(kmh * 0.539957, 2)
+def _kmh_to_knots(kmh):
+    return kmh_to_knots(kmh)
 
 
-def _risk_level_from_beaufort(bf: int) -> str:
-    if bf <= 3:
-        return "LOW"
-    if bf <= 5:
-        return "MODERATE"
-    if bf <= 7:
-        return "HIGH"
-    return "EXTREME"
+def _risk_level_from_beaufort(bf):
+    return risk_level(bf)
 
 
 def _risk_color(risk_level: str) -> str:
     return {"LOW": "#22c55e", "MODERATE": "#f59e0b", "HIGH": "#ef4444", "EXTREME": "#7c3aed"}.get(risk_level, "#6b7280")
 
 
-def _recommendations_from_bf(bf: int, wave_height: float) -> list:
-    recs = []
-    if bf >= 6:
-        recs.append("Consider altering course to reduce beam seas exposure.")
-    if bf >= 7:
-        recs.append("Reduce speed to maintain safe vessel motion and cargo security.")
-    if bf >= 8:
-        recs.append("Issue heavy weather advisory; secure all deck equipment and cargo lashings.")
-    if wave_height and wave_height > 3.5:
-        recs.append("Wave heights exceed 3.5 m — monitor hull stresses and reduce speed accordingly.")
-    if wave_height and wave_height > 6.0:
-        recs.append("Extreme swell — seek shelter or divert if operationally feasible.")
-    if not recs:
-        recs.append("Weather conditions are favourable. Continue on planned route.")
-    return recs
+def _recommendations_from_bf(bf, wave_height):
+    return recommendations(bf, wave_height)
 
 
 def _fetch_atmosphere(lat: float, lon: float) -> dict:
@@ -102,14 +82,6 @@ def _fetch_marine(lat: float, lon: float) -> dict:
     return resp.json()
 
 
-def _safe_first(data: dict, key: str, default=None):
-    """Safely extract the first element from an hourly data list."""
-    try:
-        return data['hourly'][key][0]
-    except (KeyError, IndexError, TypeError):
-        return default
-
-
 def _intermediate_point(lat1, lon1, lat2, lon2, fraction):
     phi1, lam1 = math.radians(lat1), math.radians(lon1)
     phi2, lam2 = math.radians(lat2), math.radians(lon2)
@@ -130,34 +102,15 @@ def _intermediate_point(lat1, lon1, lat2, lon2, fraction):
 
 
 def _build_weather_summary(atmo: dict, marine: dict, lat: float, lon: float) -> dict:
-    """Compile a unified weather summary dict from API responses."""
-    current = atmo.get('current', {})
-    wind_speed_kmh = current.get('wind_speed_10m') or _safe_first(atmo, 'wind_speed_10m') or 0.0
-    wind_direction = current.get('wind_direction_10m') or _safe_first(atmo, 'wind_direction_10m') or 0
-    precipitation = current.get('precipitation') or 0.0
-
-    wave_height = _safe_first(marine, 'wave_height') or 0.0
-    swell_height = _safe_first(marine, 'swell_wave_height') or 0.0
-    current_velocity = _safe_first(marine, 'ocean_current_velocity') or 0.0
-
-    bf = _beaufort_from_kmh(wind_speed_kmh)
-    risk = _risk_level_from_beaufort(bf)
-
+    """Current conditions at a position. Values the provider did not give are None."""
+    summary = summarize(atmo, marine, datetime.utcnow())
+    level = summary["risk_level"]
     return {
         "latitude": lat,
         "longitude": lon,
-        "wind_speed_kmh": round(wind_speed_kmh, 1),
-        "wind_speed_knots": _kmh_to_knots(wind_speed_kmh),
-        "wind_direction_deg": wind_direction,
-        "precipitation_mm": round(precipitation, 2),
-        "wave_height_m": round(wave_height, 2),
-        "swell_height_m": round(swell_height, 2),
-        "ocean_current_velocity_ms": round(current_velocity, 2),
-        "beaufort_scale": bf,
-        "risk_level": risk,
-        "risk_color": _risk_color(risk),
-        "recommendations": _recommendations_from_bf(bf, wave_height),
-        "fetched_at": datetime.utcnow().isoformat(),
+        **summary,
+        "risk_color": _risk_color(level),
+        "recommendations": recommendations(summary["beaufort_scale"], summary["wave_height_m"]),
     }
 
 
@@ -208,7 +161,10 @@ def current_weather():
 def route_risk():
     """
     GET /api/weather/route-risk?origin_lat=&origin_lon=&dest_lat=&dest_lon=
-    Sample 5 points along a route and return risk zones array.
+    Weather at 5 points along the great-circle line between two positions.
+
+    This is a sample of a straight line, NOT a navigable route: the line can cross land and
+    ignores traffic separation schemes, canals and restricted areas.
     """
     try:
         origin_lat = request.args.get('origin_lat', type=float)
@@ -223,18 +179,18 @@ def route_risk():
 
         sample_fractions = [0.0, 0.25, 0.50, 0.75, 1.0]
         risk_zones = []
-        overall_scores = []
+        scores = []
 
         for frac in sample_fractions:
             lat_s, lon_s = _intermediate_point(origin_lat, origin_lon, dest_lat, dest_lon, frac)
 
             try:
                 atmo = _fetch_atmosphere(lat_s, lon_s)
-            except requests.RequestException:
+            except (requests.RequestException, ValueError):
                 atmo = {}
             try:
                 marine = _fetch_marine(lat_s, lon_s)
-            except requests.RequestException:
+            except (requests.RequestException, ValueError):
                 marine = {}
 
             summary = _build_weather_summary(atmo, marine, lat_s, lon_s)
@@ -253,24 +209,34 @@ def route_risk():
                 "wind_speed_knots": summary["wind_speed_knots"],
                 "wave_height_m": summary["wave_height_m"],
                 "swell_height_m": summary["swell_height_m"],
+                "data_status": summary["data_status"]["overall"],
                 "recommendations": summary["recommendations"],
             })
+            if summary["beaufort_scale"] is not None:
+                scores.append(summary["beaufort_scale"])
 
-            bf_score = summary["beaufort_scale"]
-            overall_scores.append(bf_score)
-
-        avg_bf = round(sum(overall_scores) / len(overall_scores), 1) if overall_scores else 0
-        max_bf = max(overall_scores) if overall_scores else 0
-        overall_risk = _risk_level_from_beaufort(int(max_bf))
+        # Only points with a usable wind reading take part. With none, the overall risk is unknown.
+        overall_risk = risk_level(max(scores)) if scores else None
+        if len(scores) == len(risk_zones):
+            coverage = 'available'
+        elif scores:
+            coverage = 'partial'
+        else:
+            coverage = UNAVAILABLE
 
         return jsonify({
             'success': True,
             'risk_zones': risk_zones,
             'overall_risk_level': overall_risk,
             'overall_risk_color': _risk_color(overall_risk),
-            'avg_beaufort': avg_bf,
-            'max_beaufort': max_bf,
+            'avg_beaufort': round(sum(scores) / len(scores), 1) if scores else None,
+            'max_beaufort': max(scores) if scores else None,
             'sample_points': len(risk_zones),
+            'points_assessed': len(scores),
+            'data_status': coverage,
+            'route_basis': 'great_circle_sample',
+            'limitations': 'Samples a straight great-circle line, not a navigable route.',
+            'provider': PROVIDER,
             'assessed_at': datetime.utcnow().isoformat(),
         }), 200
 
@@ -284,13 +250,16 @@ def route_risk():
 def weather_forecast():
     """
     POST /api/weather/forecast
-    Body: {lat, lon, days?}  — returns a daily weather forecast.
+    Body: {lat, lon, days?}  returns a daily forecast. Days the provider gave no value for
+    carry null, never zero.
     """
     try:
         data = request.get_json(force=True) or {}
-        lat = float(data.get('lat', 0))
-        lon = float(data.get('lon', 0))
-        days = min(int(data.get('days', 7)), 7)
+        if data.get('lat') is None or data.get('lon') is None:
+            return jsonify({'success': False, 'error': 'lat and lon are required.'}), 400
+        lat = float(data['lat'])
+        lon = float(data['lon'])
+        days = min(max(int(data.get('days', 7)), 1), 7)
 
         if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
             return jsonify({'success': False, 'error': 'lat must be -90..90 and lon -180..180.'}), 400
@@ -315,7 +284,7 @@ def weather_forecast():
             atmo_resp = requests.get(f"{OPEN_METEO_BASE}/forecast", params=atmo_params, timeout=REQUEST_TIMEOUT)
             atmo_resp.raise_for_status()
             atmo_daily = atmo_resp.json().get('daily', {})
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             current_app.logger.warning(f'Forecast atmosphere error: {exc}')
             atmo_daily = {}
 
@@ -323,39 +292,35 @@ def weather_forecast():
             marine_resp = requests.get(f"{MARINE_API_BASE}/marine", params=marine_params, timeout=REQUEST_TIMEOUT)
             marine_resp.raise_for_status()
             marine_daily = marine_resp.json().get('daily', {})
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             current_app.logger.warning(f'Forecast marine error: {exc}')
             marine_daily = {}
 
-        dates = atmo_daily.get('time', [])
-        wind_speeds = atmo_daily.get('wind_speed_10m_max', [])
-        wind_dirs = atmo_daily.get('wind_direction_10m_dominant', [])
-        precips = atmo_daily.get('precipitation_sum', [])
-        wave_heights = marine_daily.get('wave_height_max', [])
-        swell_heights = marine_daily.get('swell_wave_height_max', [])
+        def round_or_none(value, digits):
+            return None if value is None else round(value, digits)
 
         forecast = []
-        for i, date_str in enumerate(dates):
-            ws_kmh = wind_speeds[i] if i < len(wind_speeds) else 0.0
-            wd = wind_dirs[i] if i < len(wind_dirs) else 0
-            prec = precips[i] if i < len(precips) else 0.0
-            wh = wave_heights[i] if i < len(wave_heights) else 0.0
-            sh = swell_heights[i] if i < len(swell_heights) else 0.0
-            bf = _beaufort_from_kmh(ws_kmh or 0)
-            risk = _risk_level_from_beaufort(bf)
-
+        for i, date_str in enumerate(atmo_daily.get('time', [])):
+            ws_kmh = daily_value(atmo_daily, 'wind_speed_10m_max', i)
+            bf = beaufort_from_kmh(ws_kmh)
+            level = risk_level(bf)
             forecast.append({
                 "date": date_str,
-                "wind_speed_kmh": round(ws_kmh or 0, 1),
-                "wind_speed_knots": _kmh_to_knots(ws_kmh or 0),
-                "wind_direction_deg": wd,
-                "precipitation_mm": round(prec or 0, 2),
-                "wave_height_m": round(wh or 0, 2),
-                "swell_height_m": round(sh or 0, 2),
+                "wind_speed_kmh": round_or_none(ws_kmh, 1),
+                "wind_speed_knots": kmh_to_knots(ws_kmh),
+                "wind_direction_deg": daily_value(atmo_daily, 'wind_direction_10m_dominant', i),
+                "precipitation_mm": round_or_none(daily_value(atmo_daily, 'precipitation_sum', i), 2),
+                "wave_height_m": round_or_none(daily_value(marine_daily, 'wave_height_max', i), 2),
+                "swell_height_m": round_or_none(daily_value(marine_daily, 'swell_wave_height_max', i), 2),
                 "beaufort_scale": bf,
-                "risk_level": risk,
-                "risk_color": _risk_color(risk),
+                "risk_level": level,
+                "risk_color": _risk_color(level),
             })
+
+        atmosphere_status = 'available' if forecast else UNAVAILABLE
+        marine_status = 'available' if marine_daily.get('time') else UNAVAILABLE
+        overall = ('available' if atmosphere_status == marine_status == 'available'
+                   else UNAVAILABLE if atmosphere_status == marine_status == UNAVAILABLE else 'partial')
 
         return jsonify({
             'success': True,
@@ -363,10 +328,12 @@ def weather_forecast():
             'lon': lon,
             'forecast_days': days,
             'forecast': forecast,
+            'data_status': {'overall': overall, 'atmosphere': atmosphere_status, 'marine': marine_status},
+            'provider': PROVIDER,
             'generated_at': datetime.utcnow().isoformat(),
         }), 200
 
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return jsonify({'success': False, 'error': f'Invalid value: {exc}'}), 400
     except Exception as exc:
         current_app.logger.error(f'Forecast error: {exc}', exc_info=True)
@@ -646,45 +613,6 @@ def _weather_attribution(wind_knots: float, wave_height: float, swell_height: fl
     }
 
 
-def _interpolate_025_grid(lat: float, lon: float, data_1deg: dict) -> dict:
-    """
-    Simulate 0.25° grid enhancement by interpolating between neighboring 1° points.
-    In production this would use actual 0.25° gridded data (ECMWF, GFS).
-    Returns enhanced weather at 0.25° resolution with uncertainty estimate.
-    """
-    import random
-    random.seed(int(abs(lat * lon * 100)))
-
-    # Simulate spatial variability at 0.25° resolution
-    variation_scale = 0.12
-    wind_variation = 1 + random.uniform(-variation_scale, variation_scale)
-    wave_variation = 1 + random.uniform(-variation_scale * 0.8, variation_scale * 0.8)
-
-    base_wind = data_1deg.get('wind_speed_knots', 10)
-    base_wave = data_1deg.get('wave_height_m', 1.5)
-
-    enhanced_wind = round(base_wind * wind_variation, 2)
-    enhanced_wave = round(base_wave * wave_variation, 2)
-
-    bf_1deg = _calculate_beaufort_from_knots(base_wind)
-    bf_025deg = _calculate_beaufort_from_knots(enhanced_wind)
-
-    return {
-        'resolution': '0.25deg',
-        'lat': lat,
-        'lon': lon,
-        'wind_speed_knots': enhanced_wind,
-        'wave_height_m': enhanced_wave,
-        'beaufort_scale': bf_025deg,
-        'grid_cell_size_km': 27.8,
-        'improvement_vs_1deg': {
-            'wind_delta_knots': round(enhanced_wind - base_wind, 2),
-            'wave_delta_m': round(enhanced_wave - base_wave, 2),
-            'beaufort_delta': bf_025deg - bf_1deg,
-        }
-    }
-
-
 @weather_bp.route('/wind-impact', methods=['POST'])
 @tenant_required('read')
 def wind_impact():
@@ -697,15 +625,24 @@ def wind_impact():
     """
     try:
         data = request.get_json(force=True) or {}
-        wind_speed = float(data.get('wind_speed_knots', 15))
-        wind_dir = data.get('wind_direction', 'head')
-        base_speed = float(data.get('base_speed', 14))
-        base_fuel = float(data.get('base_fuel_mt_day', 28))
-        distance_nm = float(data.get('distance_nm', 0))
-        wave_height = float(data.get('wave_height_m', 1.0))
-        swell_height = float(data.get('swell_height_m', 0.5))
-        current_speed = float(data.get('current_speed_knots', 0))
+        missing = [k for k in ('wind_speed_knots', 'base_speed', 'base_fuel_mt_day', 'wave_height_m', 'swell_height_m')
+                   if data.get(k) in (None, '')]
+        if missing:
+            return jsonify({'success': False, 'error': f"Missing required inputs: {', '.join(missing)}. "
+                            "This is a what-if calculator; it does not assume values."}), 400
+        if data.get('wind_direction') not in ('head', 'tail', 'cross'):
+            return jsonify({'success': False, 'error': "wind_direction must be 'head', 'tail' or 'cross'."}), 400
+        wind_speed = float(data['wind_speed_knots'])
+        wind_dir = data['wind_direction']
+        base_speed = float(data['base_speed'])
+        base_fuel = float(data['base_fuel_mt_day'])
+        distance_nm = float(data.get('distance_nm') or 0)   # 0 = no voyage-level totals requested
+        wave_height = float(data['wave_height_m'])
+        swell_height = float(data['swell_height_m'])
+        current_speed = float(data.get('current_speed_knots') or 0)   # 0 = no current
         current_favorable = bool(data.get('current_favorable', False))
+        if base_speed <= 0 or min(wind_speed, base_fuel, wave_height, swell_height, current_speed) < 0:
+            return jsonify({'success': False, 'error': 'Inputs must be non-negative and base_speed must be positive.'}), 400
 
         result = {}
         if wind_dir == 'head':
@@ -727,6 +664,8 @@ def wind_impact():
 
         return jsonify({'success': True, **result}), 200
 
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Inputs must be numbers.'}), 400
     except Exception as exc:
         current_app.logger.error(f'Wind impact error: {exc}', exc_info=True)
         return jsonify({'success': False, 'error': 'Request failed'}), 500
@@ -741,96 +680,25 @@ def fuel_attribution():
     """
     try:
         data = request.get_json(force=True) or {}
-        wind_knots = float(data.get('wind_speed_knots', 20))
-        wave_m = float(data.get('wave_height_m', 2.0))
-        swell_m = float(data.get('swell_height_m', 1.0))
-        current_kts = float(data.get('current_speed_knots', 0.5))
+        missing = [k for k in ('wind_speed_knots', 'wave_height_m', 'swell_height_m', 'base_fuel_mt_day')
+                   if data.get(k) in (None, '')]
+        if missing:
+            return jsonify({'success': False, 'error': f"Missing required inputs: {', '.join(missing)}. "
+                            "This is a what-if calculator; it does not assume values."}), 400
+        wind_knots = float(data['wind_speed_knots'])
+        wave_m = float(data['wave_height_m'])
+        swell_m = float(data['swell_height_m'])
+        current_kts = float(data.get('current_speed_knots') or 0)   # 0 = no current
         current_fav = bool(data.get('current_favorable', False))
-        base_fuel = float(data.get('base_fuel_mt_day', 28.5))
+        base_fuel = float(data['base_fuel_mt_day'])
+        if min(wind_knots, wave_m, swell_m, current_kts, base_fuel) < 0:
+            return jsonify({'success': False, 'error': 'Inputs must be non-negative.'}), 400
 
         result = _weather_attribution(wind_knots, wave_m, swell_m, current_kts, current_fav, base_fuel)
         return jsonify({'success': True, **result}), 200
 
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Inputs must be numbers.'}), 400
     except Exception as exc:
         current_app.logger.error(f'Attribution error: {exc}', exc_info=True)
-        return jsonify({'success': False, 'error': 'Request failed'}), 500
-
-
-@weather_bp.route('/grid-enhance', methods=['POST'])
-@tenant_required('read')
-def grid_enhance():
-    """
-    POST /api/weather/grid-enhance
-    Enhance 1° grid weather data to 0.25° resolution.
-    Body: {lat, lon, waypoints?: [{lat, lon}]}
-    Returns: 1° vs 0.25° comparison with fuel/ETA delta.
-    """
-    try:
-        data = request.get_json(force=True) or {}
-        waypoints = data.get('waypoints', [])
-        base_speed = float(data.get('base_speed', 14))
-        base_fuel = float(data.get('base_fuel_mt_day', 28))
-        distance_nm = float(data.get('distance_nm', 5000))
-
-        if not waypoints:
-            lat = float(data.get('lat', 20))
-            lon = float(data.get('lon', 60))
-            waypoints = [{'lat': lat, 'lon': lon}]
-
-        enhanced_points = []
-        total_wind_delta = 0
-        total_wave_delta = 0
-
-        for wp in waypoints[:10]:
-            lat_w, lon_w = float(wp['lat']), float(wp['lon'])
-            # Get 1° data (simplified — in prod would fetch real 1° data)
-            mock_1deg = {
-                'wind_speed_knots': 15 + abs(lat_w / 10),
-                'wave_height_m': 1.5 + abs(lat_w / 20),
-                'beaufort_scale': 4
-            }
-            enhanced = _interpolate_025_grid(lat_w, lon_w, mock_1deg)
-            enhanced['original_1deg'] = mock_1deg
-            enhanced_points.append(enhanced)
-            total_wind_delta += enhanced['improvement_vs_1deg']['wind_delta_knots']
-            total_wave_delta += enhanced['improvement_vs_1deg']['wave_delta_m']
-
-        n = len(enhanced_points) or 1
-        avg_wind_delta = total_wind_delta / n
-        avg_wave_delta = total_wave_delta / n
-
-        # Estimate fuel/ETA improvement from better routing with 0.25° data
-        fuel_improvement_mt = abs(avg_wind_delta) * 0.3 + abs(avg_wave_delta) * 0.5
-        time_improvement_hrs = (distance_nm / base_speed) * (fuel_improvement_mt / base_fuel) * 0.5
-
-        return jsonify({
-            'success': True,
-            'resolution_comparison': {
-                '1deg_grid': {
-                    'resolution': '1.0°',
-                    'grid_size_km': 111,
-                    'waypoints_assessed': len(enhanced_points),
-                    'estimated_fuel_mt': round(base_fuel * distance_nm / 24 / base_speed, 1) if base_speed > 0 else None,
-                    'estimated_duration_hrs': round(distance_nm / base_speed, 1) if base_speed > 0 else None,
-                },
-                '025deg_grid': {
-                    'resolution': '0.25°',
-                    'grid_size_km': 27.8,
-                    'waypoints_assessed': len(enhanced_points),
-                    'estimated_fuel_mt': round(max(0, base_fuel * distance_nm / 24 / base_speed - fuel_improvement_mt), 1) if base_speed > 0 else None,
-                    'estimated_duration_hrs': round(max(0, distance_nm / base_speed - time_improvement_hrs), 1) if base_speed > 0 else None,
-                }
-            },
-            'improvement': {
-                'fuel_savings_mt': round(fuel_improvement_mt, 2),
-                'time_savings_hrs': round(time_improvement_hrs, 2),
-                'cost_savings_usd': round(fuel_improvement_mt * 620, 0),
-                'avg_wind_refinement_knots': round(abs(avg_wind_delta), 2),
-                'avg_wave_refinement_m': round(abs(avg_wave_delta), 2),
-            },
-            'enhanced_waypoints': enhanced_points,
-        }), 200
-
-    except Exception as exc:
-        current_app.logger.error(f'Grid enhance error: {exc}', exc_info=True)
         return jsonify({'success': False, 'error': 'Request failed'}), 500

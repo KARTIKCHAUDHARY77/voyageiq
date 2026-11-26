@@ -116,7 +116,6 @@ export const weatherAPI = {
   forecast: (data: object) => api.post('/api/weather/forecast', data),
   windImpact: (data: object) => api.post('/api/weather/wind-impact', data),
   attribution: (data: object) => api.post('/api/weather/attribution', data),
-  gridEnhance: (data: object) => api.post('/api/weather/grid-enhance', data),
 }
 
 export const copilotAPI = {

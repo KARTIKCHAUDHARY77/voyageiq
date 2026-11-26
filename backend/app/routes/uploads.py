@@ -362,7 +362,7 @@ def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str
             vessel_id=vessel_id,
             voyage_id=voyage_id,
             report_date=rec['report_date'],
-            report_time=rec.get('report_time') or datetime.utcnow().time(),
+            report_time=rec.get('report_time'),   # None when the file has no time; never invented
             latitude=rec['latitude'],
             longitude=rec['longitude'],
             speed_over_ground=rec.get('speed_over_ground'),
