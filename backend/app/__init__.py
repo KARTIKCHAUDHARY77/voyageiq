@@ -3,6 +3,7 @@ VoyageIQ AI - Flask application factory.
 """
 import logging
 import os
+from datetime import datetime
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -165,5 +166,15 @@ def _bootstrap_accounts(app):
         user.is_active = True
         user.set_password(admin_password)
         db.session.add(user)
+        db.session.flush()
+        # The first admin needs an organization to work in. Created once, owned by them.
+        from .models import Organization, OrganizationMember
+        if not OrganizationMember.query.filter_by(user_id=user.id).first():
+            org = Organization(name=os.environ.get('ADMIN_ORG_NAME', '').strip() or 'My Organization',
+                               company_email=admin_email)
+            db.session.add(org)
+            db.session.flush()
+            db.session.add(OrganizationMember(
+                organization_id=org.id, user_id=user.id, role='owner', joined_at=datetime.utcnow()))
         db.session.commit()
         app.logger.warning('Bootstrap admin ready: %s. Remove ADMIN_PASSWORD from the environment.', admin_email)

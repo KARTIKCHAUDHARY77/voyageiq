@@ -8,10 +8,10 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from ..models import Vessel, Voyage, NoonReport, Claim
 from ..extensions import db
+from ..tenancy import audit, current_org_id, get_scoped, scoped_query, tenant_required
 
 voyages_bp = Blueprint('voyages', __name__)
 
@@ -29,7 +29,7 @@ def _safe_int(v):
 # List voyages
 # ---------------------------------------------------------------------------
 @voyages_bp.route('', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def list_voyages():
     try:
         page     = request.args.get('page', 1, type=int)
@@ -37,7 +37,7 @@ def list_voyages():
         status   = request.args.get('status')
         vessel_id = request.args.get('vessel_id')
 
-        query = Voyage.query.join(Vessel, Voyage.vessel_id == Vessel.id, isouter=True)
+        query = scoped_query(Voyage).join(Vessel, Voyage.vessel_id == Vessel.id, isouter=True)
         if status:
             query = query.filter(Voyage.status == status)
         if vessel_id:
@@ -51,7 +51,7 @@ def list_voyages():
             vd['vessel_name'] = v.vessel.name if v.vessel else None
             vd['vessel_type'] = v.vessel.vessel_type if v.vessel else None
             # Report count
-            vd['report_count'] = NoonReport.query.filter_by(voyage_id=v.id).count()
+            vd['report_count'] = scoped_query(NoonReport).filter_by(voyage_id=v.id).count()
             voyages_data.append(vd)
 
         return jsonify({'voyages': voyages_data, 'total': pagination.total,
@@ -64,17 +64,17 @@ def list_voyages():
 # Get single voyage
 # ---------------------------------------------------------------------------
 @voyages_bp.route('/<voyage_id>', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_voyage(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
         data = voyage.to_dict()
         data['vessel_name'] = voyage.vessel.name if voyage.vessel else None
         data['vessel_type'] = voyage.vessel.vessel_type if voyage.vessel else None
         data['vessel_imo']  = voyage.vessel.imo_number if voyage.vessel else None
-        data['report_count'] = NoonReport.query.filter_by(voyage_id=voyage_id).count()
+        data['report_count'] = scoped_query(NoonReport).filter_by(voyage_id=voyage_id).count()
         return jsonify(data)
     except Exception as e:
         return jsonify({'error': 'Request failed'}), 500
@@ -84,7 +84,7 @@ def get_voyage(voyage_id):
 # Create voyage
 # ---------------------------------------------------------------------------
 @voyages_bp.route('', methods=['POST'])
-@jwt_required()
+@tenant_required('voyage:write')
 def create_voyage():
     try:
         data = request.get_json() or {}
@@ -92,11 +92,11 @@ def create_voyage():
             if not data.get(req_field):
                 return jsonify({'error': f'{req_field} is required'}), 400
 
-        vessel = Vessel.query.get(data['vessel_id'])
+        vessel = get_scoped(Vessel, data['vessel_id'])
         if not vessel:
             return jsonify({'error': 'Vessel not found'}), 404
 
-        if Voyage.query.filter_by(voyage_number=data['voyage_number']).first():
+        if scoped_query(Voyage).filter_by(voyage_number=data['voyage_number']).first():
             return jsonify({'error': f"Voyage number '{data['voyage_number']}' already exists"}), 409
 
         def parse_dt(val):
@@ -106,6 +106,7 @@ def create_voyage():
 
         voyage = Voyage(
             id=str(uuid.uuid4()),
+            organization_id=current_org_id(),
             vessel_id=data['vessel_id'],
             voyage_number=data['voyage_number'].strip(),
             status=data.get('status', 'planned'),
@@ -122,6 +123,8 @@ def create_voyage():
         )
 
         db.session.add(voyage)
+        db.session.flush()
+        audit('voyage.created', 'voyage', voyage.id, voyage_number=voyage.voyage_number)
         db.session.commit()
         vd = voyage.to_dict()
         vd['vessel_name'] = vessel.name
@@ -135,10 +138,10 @@ def create_voyage():
 # Update voyage
 # ---------------------------------------------------------------------------
 @voyages_bp.route('/<voyage_id>', methods=['PUT'])
-@jwt_required()
+@tenant_required('voyage:write')
 def update_voyage(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
         data = request.get_json() or {}
@@ -158,15 +161,15 @@ def update_voyage(voyage_id):
 # Noon reports list
 # ---------------------------------------------------------------------------
 @voyages_bp.route('/<voyage_id>/noon-reports', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def list_noon_reports(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
         page     = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 100, type=int)
-        pagination = (NoonReport.query.filter_by(voyage_id=voyage_id)
+        pagination = (scoped_query(NoonReport).filter_by(voyage_id=voyage_id)
                       .order_by(NoonReport.report_date.desc())
                       .paginate(page=page, per_page=per_page, error_out=False))
         return jsonify({'reports': [r.to_dict() for r in pagination.items],
@@ -212,10 +215,10 @@ def _validate_noon(data):
 
 
 @voyages_bp.route('/<voyage_id>/noon-reports', methods=['POST'])
-@jwt_required()
+@tenant_required('report:write')
 def add_noon_report(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
 
@@ -237,7 +240,7 @@ def add_noon_report(voyage_id):
         report_day = parse_date(data.get('report_date'))
         if report_day is None:
             return jsonify({'error': 'Please fix the highlighted fields', 'fields': {'report_date': 'Use the format YYYY-MM-DD'}}), 400
-        duplicate = NoonReport.query.filter_by(
+        duplicate = scoped_query(NoonReport).filter_by(
             voyage_id=voyage_id, report_date=report_day, report_type=data.get('report_type', 'noon')).first()
         if duplicate:
             return jsonify({'error': 'A report of this type already exists for that date',
@@ -245,6 +248,7 @@ def add_noon_report(voyage_id):
 
         report = NoonReport(
             id=str(uuid.uuid4()),
+            organization_id=voyage.organization_id,
             voyage_id=voyage_id,
             vessel_id=voyage.vessel_id,   # required NOT NULL
             # Date/time
@@ -292,6 +296,8 @@ def add_noon_report(voyage_id):
         report.total_fuel_consumption = round(total, 3) if total else None
 
         db.session.add(report)
+        db.session.flush()
+        audit('noon_report.created', 'noon_report', report.id, voyage_id=voyage_id)
         db.session.commit()
 
         # Update voyage totals
@@ -306,7 +312,7 @@ def add_noon_report(voyage_id):
 def _update_voyage_stats(voyage):
     """Recalculate voyage aggregate stats from all noon reports."""
     try:
-        reports = NoonReport.query.filter_by(voyage_id=voyage.id).all()
+        reports = scoped_query(NoonReport).filter_by(voyage_id=voyage.id).all()
         if not reports: return
         distances = [r.distance_noon_to_noon for r in reports if r.distance_noon_to_noon]
         speeds    = [r.speed_over_ground for r in reports if r.speed_over_ground]
@@ -323,14 +329,14 @@ def _update_voyage_stats(voyage):
 # Voyage performance
 # ---------------------------------------------------------------------------
 @voyages_bp.route('/<voyage_id>/performance', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_voyage_performance(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
 
-        reports = (NoonReport.query.filter_by(voyage_id=voyage_id)
+        reports = (scoped_query(NoonReport).filter_by(voyage_id=voyage_id)
                    .order_by(NoonReport.report_date.asc()).all())
 
         if not reports:
@@ -394,13 +400,13 @@ def get_voyage_performance(voyage_id):
 # Voyage claims
 # ---------------------------------------------------------------------------
 @voyages_bp.route('/<voyage_id>/claims', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_voyage_claims(voyage_id):
     try:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if not voyage:
             return jsonify({'error': 'Voyage not found'}), 404
-        claims = Claim.query.filter_by(voyage_id=voyage_id).order_by(Claim.created_at.desc()).all()
+        claims = scoped_query(Claim).filter_by(voyage_id=voyage_id).order_by(Claim.created_at.desc()).all()
         return jsonify({'voyage_id': voyage_id, 'voyage_number': voyage.voyage_number,
                         'vessel_name': voyage.vessel.name if voyage.vessel else None,
                         'claims': [c.to_dict() for c in claims],

@@ -14,11 +14,10 @@ import os
 from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
 
 from ..extensions import db
 from ..models import Claim, NoonReport, Vessel, Voyage
-from ..security import CLAIM_WRITE_ROLES, roles_required
+from ..tenancy import audit, current_org_id, get_scoped, scoped_query, tenant_required
 
 claims_bp = Blueprint('claims', __name__)
 
@@ -143,12 +142,12 @@ def _detect(voyage, vessel, reports):
 # ---------------------------------------------------------------------------
 
 @claims_bp.route('', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def list_claims():
     page = max(request.args.get('page', 1, type=int), 1)
     per_page = min(max(request.args.get('per_page', 50, type=int), 1), 100)
 
-    query = Claim.query
+    query = scoped_query(Claim)
     for arg in ('status', 'severity', 'voyage_id', 'vessel_id'):
         value = request.args.get(arg)
         if value:
@@ -156,7 +155,7 @@ def list_claims():
 
     pagination = query.order_by(Claim.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     open_exposure = db.session.query(db.func.coalesce(db.func.sum(Claim.estimated_impact_usd), 0)).filter(
-        Claim.status == 'open').scalar()
+        Claim.organization_id == current_org_id(), Claim.status == 'open').scalar()
 
     return jsonify({
         'claims': [_claim_dict(c) for c in pagination.items],
@@ -166,24 +165,23 @@ def list_claims():
 
 
 @claims_bp.route('/<claim_id>', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_claim(claim_id):
-    claim = db.session.get(Claim, claim_id)
+    claim = get_scoped(Claim, claim_id)
     if not claim:
         return jsonify({'error': 'Claim not found'}), 404
     return jsonify(_claim_dict(claim))
 
 
 @claims_bp.route('', methods=['POST'])
-@jwt_required()
-@roles_required(*CLAIM_WRITE_ROLES)
+@tenant_required('claim:write')
 def create_claim():
     data = request.get_json(silent=True) or {}
     missing = [f for f in ('voyage_id', 'claim_type', 'description') if not data.get(f)]
     if missing:
         return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
 
-    voyage = db.session.get(Voyage, data['voyage_id'])
+    voyage = get_scoped(Voyage, data['voyage_id'])
     if not voyage:
         return jsonify({'error': 'Voyage not found'}), 404
     severity = data.get('severity', 'medium')
@@ -195,21 +193,22 @@ def create_claim():
         return jsonify({'error': 'estimated_impact_usd must be a number'}), 400
 
     claim = Claim(
-        voyage_id=voyage.id, vessel_id=voyage.vessel_id,
+        organization_id=voyage.organization_id, voyage_id=voyage.id, vessel_id=voyage.vessel_id,
         claim_type=str(data['claim_type'])[:100], detected_date=date.today(),
         severity=severity, status='open', description=str(data['description'])[:5000],
         estimated_impact_usd=impact, notes=(data.get('notes') or None),
     )
     db.session.add(claim)
+    db.session.flush()
+    audit('claim.created', 'claim', claim.id, voyage_id=voyage.id, claim_type=claim.claim_type)
     db.session.commit()
     return jsonify(_claim_dict(claim, voyage)), 201
 
 
 @claims_bp.route('/<claim_id>/status', methods=['PUT'])
-@jwt_required()
-@roles_required(*CLAIM_WRITE_ROLES)
+@tenant_required('claim:write')
 def update_claim_status(claim_id):
-    claim = db.session.get(Claim, claim_id)
+    claim = get_scoped(Claim, claim_id)
     if not claim:
         return jsonify({'error': 'Claim not found'}), 404
 
@@ -222,21 +221,21 @@ def update_claim_status(claim_id):
     claim.status = status
     if data.get('notes'):
         claim.notes = str(data['notes'])[:5000]
+    audit('claim.status_changed', 'claim', claim.id, previous=previous, new=status)
     db.session.commit()
     return jsonify({'claim_id': claim.id, 'previous_status': previous, 'new_status': status, 'claim': _claim_dict(claim)})
 
 
 @claims_bp.route('/detect/<voyage_id>', methods=['POST', 'GET'])
-@jwt_required()
-@roles_required(*CLAIM_WRITE_ROLES)
+@tenant_required('claim:write')
 def detect_claims(voyage_id):
     """Run detection for one voyage and save new findings. Re-running updates open claims instead of duplicating them."""
-    voyage = db.session.get(Voyage, voyage_id)
+    voyage = get_scoped(Voyage, voyage_id)
     if not voyage:
         return jsonify({'error': 'Voyage not found'}), 404
-    vessel = db.session.get(Vessel, voyage.vessel_id)
+    vessel = get_scoped(Vessel, voyage.vessel_id)
 
-    reports = NoonReport.query.filter_by(voyage_id=voyage_id).order_by(NoonReport.report_date.asc()).all()
+    reports = scoped_query(NoonReport).filter_by(voyage_id=voyage_id).order_by(NoonReport.report_date.asc()).all()
     base = {'voyage_id': voyage_id, 'voyage_number': voyage.voyage_number, 'vessel_name': vessel.name if vessel else None,
             'reports_analysed': len(reports), 'detected_claims': [], 'new_claims_created': 0, 'notes': []}
     if not reports:
@@ -246,9 +245,9 @@ def detect_claims(voyage_id):
     findings, notes = _detect(voyage, vessel, reports)
     saved, created = [], 0
     for f in findings:
-        claim = Claim.query.filter_by(voyage_id=voyage_id, claim_type=f['claim_type'], status='open').first()
+        claim = scoped_query(Claim).filter_by(voyage_id=voyage_id, claim_type=f['claim_type'], status='open').first()
         if claim is None:
-            claim = Claim(voyage_id=voyage_id, vessel_id=voyage.vessel_id, detected_date=date.today(), status='open')
+            claim = Claim(organization_id=voyage.organization_id, voyage_id=voyage_id, vessel_id=voyage.vessel_id, detected_date=date.today(), status='open')
             db.session.add(claim)
             created += 1
         for key, value in f.items():

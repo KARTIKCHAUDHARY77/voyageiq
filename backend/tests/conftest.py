@@ -6,6 +6,7 @@ environment at import time. Each test gets an empty database.
 """
 import os
 import tempfile
+from datetime import datetime
 
 _DB_DIR = tempfile.mkdtemp(prefix="voyageiq-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_DB_DIR}/test.db"
@@ -19,7 +20,9 @@ import pytest  # noqa: E402
 
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
-from app.models import User  # noqa: E402
+from app.models import Organization, OrganizationMember, User  # noqa: E402
+from app.tenancy import current_org_id, tenant_required  # noqa: E402
+from flask import Blueprint, g, jsonify  # noqa: E402
 from app.security import limiter  # noqa: E402
 
 PASSWORD = "correct-horse-battery-1"
@@ -29,6 +32,21 @@ PASSWORD = "correct-horse-battery-1"
 def app():
     application = create_app("development")
     application.config["TESTING"] = True
+
+    # Test-only routes that exercise the tenant decorator on its own.
+    probe = Blueprint("probe", __name__)
+
+    @probe.route("/_probe/read")
+    @tenant_required("read")
+    def probe_read():
+        return jsonify({"org": current_org_id(), "role": g.tenant.role})
+
+    @probe.route("/_probe/fleet-write", methods=["POST"])
+    @tenant_required("fleet:write")
+    def probe_write():
+        return jsonify({"ok": True})
+
+    application.register_blueprint(probe)
     limiter.enabled = False
     return application
 
@@ -50,20 +68,38 @@ def client(app):
 
 @pytest.fixture
 def make_user(app):
-    """Create a user belonging to `company` and return their id.
+    """Create a user who is a member of the organization named `company`.
 
-    This is the single place that knows how a user is attached to a company.
-    When organizations are introduced, only this fixture has to change.
+    The organization is created on first use, so two users with the same company
+    name share one organization and different names are different organizations.
+    `role` is an organization role; the legacy name "manager" means fleet_manager.
+    Returns the user id.
     """
-    def _make(email, company, role="manager"):
+    def _make(email, company, role="manager", status="active"):
+        org_role = {"manager": "fleet_manager"}.get(role, role)
         with app.app_context():
-            user = User(email=email, full_name=email.split("@")[0],
-                        company_name=company, role=role)
+            user = User(email=email, full_name=email.split("@")[0], company_name=company)
             user.set_password(PASSWORD)
+            org = Organization.query.filter_by(name=company).first()
+            if org is None:
+                org = Organization(name=company)
+                db.session.add(org)
             db.session.add(user)
+            db.session.flush()
+            db.session.add(OrganizationMember(
+                organization_id=org.id, user_id=user.id, role=org_role, status=status,
+                joined_at=datetime.utcnow()))
             db.session.commit()
             return user.id
     return _make
+
+
+@pytest.fixture
+def org_id(app):
+    def _org_id(company):
+        with app.app_context():
+            return Organization.query.filter_by(name=company).first().id
+    return _org_id
 
 
 @pytest.fixture

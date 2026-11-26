@@ -13,11 +13,11 @@ import io
 import csv
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..security import csv_safe
 
 from app.extensions import db
 from app.models import Voyage, Vessel, NoonReport, Claim, FuelAnalytic
+from app.tenancy import audit, get_scoped, scoped_query, tenant_required
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -44,18 +44,18 @@ def _fmt(val, decimals=1, unit=''):
 
 def _load_voyage_data(voyage_id: str):
     """Load all data needed to build a voyage report."""
-    voyage = Voyage.query.get(voyage_id)
+    voyage = get_scoped(Voyage, voyage_id)
     if not voyage:
         return None, None, [], [], []
-    vessel = Vessel.query.get(voyage.vessel_id)
+    vessel = get_scoped(Vessel, voyage.vessel_id)
     reports = (
-        NoonReport.query
+        scoped_query(NoonReport)
         .filter_by(voyage_id=voyage_id)
         .order_by(NoonReport.report_date.asc())
         .all()
     )
-    claims = Claim.query.filter_by(voyage_id=voyage_id).all()
-    fuel_analytics = FuelAnalytic.query.filter_by(voyage_id=voyage_id).all()
+    claims = scoped_query(Claim).filter_by(voyage_id=voyage_id).all()
+    fuel_analytics = scoped_query(FuelAnalytic).filter_by(voyage_id=voyage_id).all()
     return voyage, vessel, reports, claims, fuel_analytics
 
 
@@ -582,7 +582,7 @@ def _generate_csv(voyage, vessel, reports, claims, fuel_analytics) -> bytes:
 # ---------------------------------------------------------------------------
 
 @reports_bp.route('/generate/<voyage_id>', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def generate_report(voyage_id):
     """
     GET /api/reports/generate/<voyage_id>?format=pdf|excel|csv
@@ -596,6 +596,9 @@ def generate_report(voyage_id):
         voyage, vessel, reports, claims, fuel_analytics = _load_voyage_data(voyage_id)
         if not voyage:
             return jsonify({'success': False, 'error': 'Voyage not found.'}), 404
+
+        audit('report.exported', 'voyage', voyage_id, format=fmt)  # data leaves the system
+        db.session.commit()
 
         vessel_name_safe = (vessel.name if vessel else 'vessel').replace(' ', '_')
         voyage_num_safe = voyage.voyage_number.replace(' ', '_')
@@ -640,7 +643,7 @@ def generate_report(voyage_id):
 
 
 @reports_bp.route('/templates', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def list_templates():
     """GET /api/reports/templates — Return available report templates."""
     templates = [

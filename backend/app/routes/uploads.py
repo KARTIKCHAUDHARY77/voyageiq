@@ -14,12 +14,12 @@ import re
 import io
 import json
 from datetime import datetime, date
-from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, g, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models import ReportUpload, NoonReport, Vessel, Voyage
+from app.tenancy import audit, current_org_id, get_scoped, scoped_query, tenant_required
 
 uploads_bp = Blueprint('uploads', __name__)
 
@@ -343,7 +343,7 @@ def _coerce_temporal(rec):
 
 
 def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str,
-                              uploaded_by: str):
+                              uploaded_by: str, organization_id: str):
     """Convert parsed field dicts to NoonReport model instances."""
     noon_reports = []
     skipped = []
@@ -358,6 +358,7 @@ def _records_to_noon_reports(records: list[dict], vessel_id: str, voyage_id: str
             continue
 
         nr = NoonReport(
+            organization_id=organization_id,
             vessel_id=vessel_id,
             voyage_id=voyage_id,
             report_date=rec['report_date'],
@@ -423,7 +424,7 @@ def _content_matches(ftype, data):
 
 
 @uploads_bp.route('/report', methods=['POST'])
-@jwt_required()
+@tenant_required('report:write')
 def upload_report():
     """
     POST /api/uploads/report
@@ -431,7 +432,7 @@ def upload_report():
     Form data: file, vessel_id, voyage_id
     """
     try:
-        user_id = get_jwt_identity()
+        user_id = g.tenant.user_id
 
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': 'No file part in request.'}), 400
@@ -447,10 +448,16 @@ def upload_report():
         if not _allowed_file(file.filename):
             return jsonify({'success': False, 'error': f"File type not allowed. Accepted: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
 
-        # Verify vessel exists
-        vessel = Vessel.query.get(vessel_id)
+        # Both must belong to the caller's organization. A foreign id looks like a missing one.
+        vessel = get_scoped(Vessel, vessel_id)
         if not vessel:
             return jsonify({'success': False, 'error': 'Vessel not found.'}), 404
+        if voyage_id:
+            voyage = get_scoped(Voyage, voyage_id)
+            if not voyage:
+                return jsonify({'success': False, 'error': 'Voyage not found.'}), 404
+            if voyage.vessel_id != vessel.id:
+                return jsonify({'success': False, 'error': 'That voyage belongs to a different vessel.'}), 400
 
         filename = secure_filename(file.filename)
         ftype = _file_type(filename)
@@ -472,6 +479,7 @@ def upload_report():
 
         # ---- Save upload record ------------------------------------------ #
         upload = ReportUpload(
+            organization_id=current_org_id(),
             vessel_id=vessel_id,
             voyage_id=voyage_id,
             uploaded_by=user_id,
@@ -483,6 +491,8 @@ def upload_report():
             raw_parsed_data=_jsonable(records),
         )
         db.session.add(upload)
+        db.session.flush()
+        audit('upload.created', 'report_upload', upload.id, file_name=filename, records=len(records))
         db.session.commit()
 
         # ---- Return result ----------------------------------------------- #
@@ -511,12 +521,12 @@ def upload_report():
 
 
 @uploads_bp.route('/<upload_id>', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_upload(upload_id):
     """GET /api/uploads/<id> — Get upload status and parsed data."""
     try:
-        user_id = get_jwt_identity()
-        upload = ReportUpload.query.filter_by(id=upload_id, uploaded_by=user_id).first()
+        user_id = g.tenant.user_id
+        upload = get_scoped(ReportUpload, upload_id)
         if not upload:
             return jsonify({'success': False, 'error': 'Upload not found.'}), 404
 
@@ -532,7 +542,7 @@ def get_upload(upload_id):
 
 
 @uploads_bp.route('/<upload_id>/confirm', methods=['POST'])
-@jwt_required()
+@tenant_required('report:write')
 def confirm_upload(upload_id):
     """
     POST /api/uploads/<id>/confirm
@@ -540,8 +550,8 @@ def confirm_upload(upload_id):
     Optionally accepts {corrections: {field: value}} in body to override parsed values.
     """
     try:
-        user_id = get_jwt_identity()
-        upload = ReportUpload.query.filter_by(id=upload_id, uploaded_by=user_id).first()
+        user_id = g.tenant.user_id
+        upload = get_scoped(ReportUpload, upload_id)
         if not upload:
             return jsonify({'success': False, 'error': 'Upload not found.'}), 404
 
@@ -561,12 +571,12 @@ def confirm_upload(upload_id):
                 rec.update(corrections)
 
         # Verify vessel
-        vessel = Vessel.query.get(upload.vessel_id)
+        vessel = get_scoped(Vessel, upload.vessel_id)
         if not vessel:
             return jsonify({'success': False, 'error': 'Associated vessel not found.'}), 404
 
         noon_reports, skipped_rows = _records_to_noon_reports(
-            raw_records, upload.vessel_id, upload.voyage_id, user_id
+            raw_records, upload.vessel_id, upload.voyage_id, user_id, upload.organization_id
         )
 
         saved_count = 0
@@ -581,6 +591,7 @@ def confirm_upload(upload_id):
 
         upload.parse_status = 'confirmed'
         upload.parsed_records = saved_count
+        audit('upload.confirmed', 'report_upload', upload.id, saved=saved_count)
         db.session.commit()
 
         return jsonify({

@@ -32,7 +32,7 @@ Severity: **P0** critical security / data integrity · **P1** core product funct
 
 ## 3. P0 — critical security and data integrity
 
-### P0-1. There is no tenant isolation at all
+### P0-1. There is no tenant isolation at all  — RESOLVED in Milestone 2 (see docs/SECURITY.md)
 Every route reads global tables. Any authenticated user, including a self-registered `operator`, can read and mutate every other user's data.
 
 - Global reads: `vessels.py:128,169,252,283,318,361` (`Vessel.query…`, `Vessel.query.get(id)`), `voyages.py:40`, `claims.py:151,171,212,234`, `uploads.py:451,564`.
@@ -42,7 +42,7 @@ Every route reads global tables. Any authenticated user, including a self-regist
 - Role checks exist on only 3 vessel routes and 4 claim routes; voyages, noon reports, optimization, uploads, reports and analytics have authentication but **no authorization**.
 - `imo_number` is globally unique and checked globally (`vessels.py:213`): two companies cannot register the same ship, and the response reveals whether another tenant has it.
 
-### P0-2. Schema is managed by `db.create_all()`; no migrations
+### P0-2. Schema is managed by `db.create_all()`; no migrations  — RESOLVED (Alembic; see docs/IMPLEMENTATION_PROGRESS.md)
 `__init__.py:114-118` calls `create_all()` on every start and **swallows failures** with a warning. There is no Alembic. `database/schema.sql` has already drifted from the models (it has no `token_blocklist`). If `create_all` fails, the app boots without the revocation table and token checks then query a missing table.
 
 ### P0-3. Demo credentials and secrets history
@@ -50,7 +50,7 @@ Every route reads global tables. Any authenticated user, including a self-regist
 - Mitigation present: when `SEED_DEMO_DATA` is off, boot **deactivates** the three demo emails (`__init__.py:_bootstrap_accounts`). This is a patch over shared state, not a separation of demo and production.
 - Earlier commits (before `797f7ba`) published the demo password and a default secret key. Anything that ever used those values must be rotated. Git history was not rewritten.
 
-### P0-4. No automated tests, no CI
+### P0-4. No automated tests, no CI  — tests added (53); CI still open
 No `tests/`, no `pytest.ini`, no `.github/`. Nothing prevents a regression of P0-1 once fixed.
 
 ### P0-5. Missing data is converted to "good" data (weather)
@@ -62,6 +62,8 @@ No `tests/`, no `pytest.ini`, no `.github/`. Nothing prevents a regression of P0
 This is reachable through an authenticated endpoint and must be removed or clearly disabled.
 
 ## 4. P1 — core product functionality
+
+0. **Added during Milestone 2:** `voyages.py` replaces a missing noon-report time with the current clock time (`report_time=parse_time(...) or datetime.utcnow().time()`). That fabricates a value and must become `null` (Milestone 4). The claim list also summed open exposure across *all* companies; fixed with the tenant scoping.
 
 1. **Org / RBAC model absent.** Roles are global strings (`admin`, `manager`, `analyst`, `operator`) on `User`; `company_name` is a free-text field. JWT identity is the user id only: no organisation claim, no switching.
 2. **Provenance missing.** `ReportUpload` keeps the parse, but individual `NoonReport` rows carry no source, row/page, original value, unit or correction history. Imported and manual rows are indistinguishable.

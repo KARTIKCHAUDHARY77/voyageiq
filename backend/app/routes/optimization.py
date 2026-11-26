@@ -13,7 +13,7 @@ import math
 import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.tenancy import tenant_required
 
 from app.extensions import db
 from app.models import Route, Vessel, Voyage
@@ -415,7 +415,7 @@ def _generate_ai_suggestions(calc, data, weather_samples):
 # ---------------------------------------------------------------------------
 
 @optimization_bp.route('/calculate', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def calculate_voyage():
     """
     POST /api/optimization/calculate
@@ -496,7 +496,7 @@ def calculate_voyage():
 
 
 @optimization_bp.route('/route', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def generate_routes():
     """POST /api/optimization/route - Generate 4 route options."""
     data = request.get_json() or {}
@@ -549,7 +549,7 @@ def generate_routes():
 
 
 @optimization_bp.route('/fuel-simulator', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def fuel_simulator():
     data = request.get_json() or {}
     speed    = float(data.get("speed_knots", 14))
@@ -573,7 +573,7 @@ def fuel_simulator():
 
 
 @optimization_bp.route('/ports', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_ports():
     ports = [{"name": k, **v} for k, v in WORLD_PORTS.items()]
     ports.sort(key=lambda x: x["name"])

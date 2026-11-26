@@ -19,11 +19,12 @@ def generate_uuid():
 
 
 def _org_fk(table):
-    """Owning organization. Nullable until every route is tenant-scoped (see migrations).
+    """Owning organization of a row. Required: no company-owned row may exist without one.
 
     The constraint is named so a migration can drop it again (downgrade).
     """
-    return db.Column(db.String(36), db.ForeignKey('organizations.id', name=f'fk_{table}_organization_id'), index=True)
+    return db.Column(db.String(36), db.ForeignKey('organizations.id', name=f'fk_{table}_organization_id'),
+                     nullable=False, index=True)
 
 
 class User(db.Model):
@@ -61,10 +62,12 @@ class User(db.Model):
 
 class Vessel(db.Model):
     __tablename__ = 'vessels'
+    # Two companies may track the same ship; within one company an IMO appears once.
+    __table_args__ = (db.UniqueConstraint('organization_id', 'imo_number', name='uq_vessels_org_imo'),)
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
     organization_id = _org_fk('vessels')
-    imo_number = db.Column(db.String(20), unique=True, nullable=False)
+    imo_number = db.Column(db.String(20), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     vessel_type = db.Column(db.String(100), nullable=False)
     flag = db.Column(db.String(100))
@@ -116,6 +119,7 @@ class Vessel(db.Model):
 
 class Voyage(db.Model):
     __tablename__ = 'voyages'
+    __table_args__ = (db.UniqueConstraint('organization_id', 'voyage_number', name='uq_voyages_org_number'),)
     
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
     organization_id = _org_fk('voyages')
