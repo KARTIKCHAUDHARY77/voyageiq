@@ -2,6 +2,24 @@
 
 The backend now fails closed. Complete steps 1-3 on the backend host (Railway or Render, whichever serves your API) **before** merging to `main`, or the first deploy will exit at startup.
 
+## 0. Production database (new in this release)
+
+The schema is now created by Alembic migrations, not by the app at startup. `start.sh` runs `flask db upgrade`, then `flask bootstrap`, then gunicorn, so an **empty** PostgreSQL database becomes a working one on first start.
+
+**You provision the database** (this needs your hosting account; it cannot be done from the repository):
+
+- **Render:** `render.yaml` already declares `voyageiq-db` and wires `DATABASE_URL` to it. Deploying the Blueprint creates it.
+- **Railway (or any host):** add a PostgreSQL service and set the backend's `DATABASE_URL` to its connection string.
+
+Then deploy. Check the logs for `Running upgrade -> aa5b766d45f7, baseline schema`, then call `/api/health`.
+
+Notes:
+
+- Run **one** backend instance for the first deploy, so two replicas do not migrate at the same time.
+- A database created by the old `create_all()` already has the tables, so `flask db upgrade` would fail with "relation already exists". If (and only if) it has **every** table the models define, including `token_blocklist`, mark it as migrated with `flask db stamp head` (once, from `backend/`, with `FLASK_APP=app:create_app`). If any table is missing, stamping would hide that. Do not stamp a database with real data without checking it first.
+- Never use `SQLite` in production. It is only the fallback when `DATABASE_URL` is unset.
+- To change the schema: edit `models.py`, run `flask db migrate -m "what changed"`, **read the generated file**, commit it. `tests/test_migrations.py` fails if models and migrations disagree.
+
 ## 1. Set backend environment variables
 
 | Variable | Value |

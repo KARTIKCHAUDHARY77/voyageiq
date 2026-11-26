@@ -9,7 +9,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import HTTPException
 
-from .extensions import db
+from .extensions import db, migrate
 from .security import limiter
 from config import config, resolve_secrets
 
@@ -110,13 +110,20 @@ def create_app(config_name=None):
     def health():
         return {'status': 'healthy'}
 
-    with app.app_context():
-        try:
-            db.create_all()
-        except Exception as e:  # keep booting; the health check will still answer
-            app.logger.warning('db.create_all failed: %s', e)
-            db.session.rollback()
+    migrate.init_app(app, db)
+
+    @app.cli.command('bootstrap')
+    def bootstrap_command():
+        """Create the first admin / lock demo accounts. Run after `flask db upgrade`."""
         _bootstrap_accounts(app)
+
+    # Development and tests build the schema from the models. Everywhere else the
+    # database is created and changed only by migrations, so a missing table is a
+    # loud deployment error instead of something papered over at startup.
+    if app.config['AUTO_CREATE_SCHEMA']:
+        with app.app_context():
+            db.create_all()
+            _bootstrap_accounts(app)
 
     return app
 

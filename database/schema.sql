@@ -2,6 +2,10 @@
 -- VoyageIQ AI - Database Schema
 -- Maritime Intelligence Platform
 -- ===========================================
+-- DEPRECATED: reference only. It is no longer loaded by docker-compose and it
+-- has drifted from the models (for example it has no token_blocklist table).
+-- The source of truth is backend/migrations (Alembic): `flask db upgrade`.
+-- ===========================================
 
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

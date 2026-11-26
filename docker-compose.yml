@@ -11,7 +11,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      # The schema is created by Alembic migrations (the backend runs `flask db upgrade`
+      # on start). database/schema.sql is no longer loaded: it would create the tables
+      # first and make the baseline migration fail.
     # Not published to the host: only the backend container needs the database.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voyageiq -d voyageiq_db"]

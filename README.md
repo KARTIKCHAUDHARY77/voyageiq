@@ -31,7 +31,7 @@ Claim detection compares good-weather days (Beaufort 4 or below, at least 3 of t
 ```
 frontend/   React 18 + TypeScript + Vite + Tailwind, Leaflet, Chart.js/Recharts
 backend/    Flask 3, SQLAlchemy, Flask-JWT-Extended, Flask-Limiter, gunicorn
-database/   schema.sql for Postgres (Docker init)
+database/   deprecated schema.sql (reference only); migrations live in backend/migrations
 ```
 
 - Browser calls `/api/*`. On Vercel, `frontend/vercel.json` proxies that path to the backend, so the browser sees a single origin.
