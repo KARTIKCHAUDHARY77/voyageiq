@@ -80,10 +80,15 @@ class Config:
     # unless you explicitly opt in.
     SEED_DEMO_DATA = os.environ.get("SEED_DEMO_DATA", "").lower() == "true"
 
+    # Create tables straight from the models on startup. Only for local development
+    # and tests. Real environments apply Alembic migrations (`flask db upgrade`).
+    AUTO_CREATE_SCHEMA = False
+
 
 class DevelopmentConfig(Config):
     DEBUG = False  # flip on with FLASK_DEBUG=1; the Werkzeug debugger allows code execution
     SEED_DEMO_DATA = os.environ.get("SEED_DEMO_DATA", "true").lower() == "true"
+    AUTO_CREATE_SCHEMA = os.environ.get("AUTO_CREATE_SCHEMA", "true").lower() == "true"
 
 
 class ProductionConfig(Config):
