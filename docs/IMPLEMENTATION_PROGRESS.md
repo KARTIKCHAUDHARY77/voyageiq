@@ -21,6 +21,28 @@ Remaining for the *milestone's wider exit condition* ("onboard users"): organiza
 (invite, change role, suspend) and organization settings endpoints and screens. They use `org:manage`, which
 is defined but unused. They are scheduled with the frontend administration work (Milestone 10).
 
+## Data honesty (first part of Milestones 4-5): done on `feature/data-honesty`
+
+Scope: stop turning missing information into values. This is groundwork, not the full ingestion
+and data-quality milestones (those are still to do: provenance, field mapping, duplicate and outlier
+detection, quality dashboard, provider interfaces, retries and caching, AIS).
+
+| Change | Where |
+|---|---|
+| Weather values are `None` when the provider gave none; `data_status` (available / partial / stale / unavailable) and `provider` on every response; "current" = nearest hour, stale readings not used | `app/services/weather_data.py`, `routes/weather.py` |
+| Failed provider requests never produce "favourable" advice or a risk level | same |
+| Route risk states it samples a great-circle line, not a navigable route; overall risk is `null` when no point could be assessed | `routes/weather.py` |
+| Random "0.25° enhancement" and `/grid-enhance` removed | `routes/weather.py`, `frontend/src/services/api.ts` |
+| Beaufort scale covers force 0-12 | `weather_data.py` |
+| What-if calculators and forecast require their inputs | `routes/weather.py` |
+| `noon_reports.report_time` nullable; missing time stored as NULL (migration `b7e2c91a40d3`) | `models.py`, `routes/voyages.py`, `routes/uploads.py` |
+| A real 0 is no longer reported as unknown (61 serializer fields) | `models.py` |
+| Weather page shows "No assessment" / data status instead of a blank badge | `WeatherIntelligencePage.tsx` |
+
+Verification: 107 backend tests (54 new: 20 weather-service unit tests, 24 route tests with simulated
+provider failures); migration `b7e2c91a40d3` verified on PostgreSQL 16 (upgrade, no drift, downgrade,
+re-upgrade); frontend `tsc --noEmit` and `vite build` pass. The frontend was not run in a browser.
+
 ### How to run the tests (matches production, Python 3.11.9)
 ```
 cd backend

@@ -53,10 +53,10 @@ Every route reads global tables. Any authenticated user, including a self-regist
 ### P0-4. No automated tests, no CI  — tests added (53); CI still open
 No `tests/`, no `pytest.ini`, no `.github/`. Nothing prevents a regression of P0-1 once fixed.
 
-### P0-5. Missing data is converted to "good" data (weather)
+### P0-5. Missing data is converted to "good" data (weather)  — RESOLVED (feature/data-honesty)
 `weather.py:135-141` and `344-354` use `… or 0.0`. If the marine API fails or returns null, `wave_height`, `swell_height` and `current_velocity` become **0**, which downstream code treats as calm seas. `or 0` also turns a real `0` and a missing value into the same thing. No freshness or availability status exists.
 
-### P0-6. Fabricated weather inside the API
+### P0-6. Fabricated weather inside the API  — RESOLVED (random "0.25° enhancement" and `/grid-enhance` removed)
 - `weather.py:649-668` `_interpolate_025_grid`: `random.seed(int(abs(lat*lon*100)))` then applies ±12% random variation and labels it a "0.25° enhancement".
 - `weather.py:785-793` feeds it a **mock "1°" input** built from latitude (`15 + abs(lat/10)` knots) and returns the result as weather data.
 This is reachable through an authenticated endpoint and must be removed or clearly disabled.
@@ -73,6 +73,13 @@ This is reachable through an authenticated endpoint and must be removed or clear
 6. **Uploads on local disk.** `backend/uploads/` is ephemeral on Railway/Render and not segregated per tenant.
 7. **Rate limiting is per process** (`memory://`, `security.py`); effective limit scales with worker count unless Redis is configured.
 8. **JWT:** refresh tokens are not rotated or revoked on use; password change revokes only the presented access token (documented in code).
+
+### Additional defects found and fixed while resolving P0-5/P0-6
+- "Current" weather used `hourly[0]`, i.e. midnight UTC today, so wave/swell/current could be up to a day old without saying so. It now uses the hour nearest to now and flags readings more than 3 hours away as stale.
+- `_beaufort_from_kmh` stopped at force 9, so storm and hurricane winds understated risk. It now covers force 0-12 (WMO).
+- `/weather/forecast` defaulted a missing position to 0,0 (open ocean off Africa); `/wind-impact` and `/attribution` silently assumed wind 15-20 kn, waves 1-2 m and base fuel 28 MT/day. All now require their inputs.
+- `float(x) if x else None` in `models.py` (61 places) reported a real 0 (idle speed, zero fuel in port, latitude 0) as "unknown". It now tests `is not None`.
+- Missing noon-report times were replaced with the entry time (manual entry and imports); `report_time` is now nullable and stores NULL.
 
 ## 5. P2 — advanced intelligence
 
