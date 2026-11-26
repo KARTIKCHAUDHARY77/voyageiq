@@ -13,7 +13,7 @@ import math
 import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required
+from app.tenancy import tenant_required
 
 weather_bp = Blueprint('weather', __name__)
 
@@ -166,7 +166,7 @@ def _build_weather_summary(atmo: dict, marine: dict, lat: float, lon: float) -> 
 # ---------------------------------------------------------------------------
 
 @weather_bp.route('/current', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def current_weather():
     """
     GET /api/weather/current?lat=&lon=
@@ -204,7 +204,7 @@ def current_weather():
 
 
 @weather_bp.route('/route-risk', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def route_risk():
     """
     GET /api/weather/route-risk?origin_lat=&origin_lon=&dest_lat=&dest_lon=
@@ -280,7 +280,7 @@ def route_risk():
 
 
 @weather_bp.route('/forecast', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def weather_forecast():
     """
     POST /api/weather/forecast
@@ -686,7 +686,7 @@ def _interpolate_025_grid(lat: float, lon: float, data_1deg: dict) -> dict:
 
 
 @weather_bp.route('/wind-impact', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def wind_impact():
     """
     POST /api/weather/wind-impact
@@ -733,7 +733,7 @@ def wind_impact():
 
 
 @weather_bp.route('/attribution', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def fuel_attribution():
     """
     POST /api/weather/attribution
@@ -757,7 +757,7 @@ def fuel_attribution():
 
 
 @weather_bp.route('/grid-enhance', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 def grid_enhance():
     """
     POST /api/weather/grid-enhance

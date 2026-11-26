@@ -12,7 +12,7 @@ import uuid
 import random
 from datetime import datetime, date, timedelta
 from ..extensions import db
-from ..models import User, Vessel, Voyage, NoonReport, Claim
+from ..models import Organization, OrganizationMember, User, Vessel, Voyage, NoonReport, Claim
 
 
 def generate_seed_data():
@@ -31,7 +31,16 @@ def generate_seed_data():
                    full_name='Sarah Chen', company_name='Ocean Cargo Lines', role='analyst')
     analyst.set_password('password123')
 
-    db.session.add_all([admin, captain, analyst])
+    # One demo organization. The demo accounts are its members.
+    org = Organization(name='Ocean Cargo Lines (demo)', company_email='demo@example.test')
+    db.session.add_all([admin, captain, analyst, org])
+    db.session.flush()
+    now = datetime.utcnow()
+    db.session.add_all([
+        OrganizationMember(organization_id=org.id, user_id=admin.id, role='owner', joined_at=now),
+        OrganizationMember(organization_id=org.id, user_id=captain.id, role='fleet_manager', joined_at=now),
+        OrganizationMember(organization_id=org.id, user_id=analyst.id, role='analyst', joined_at=now),
+    ])
     db.session.flush()
 
     # ── Vessels (real-world specs) ─────────────────────────────────────────────
@@ -85,7 +94,7 @@ def generate_seed_data():
 
     vessels = []
     for spec in vessels_spec:
-        v = Vessel(id=str(uuid.uuid4()), **spec)
+        v = Vessel(id=str(uuid.uuid4()), organization_id=org.id, **spec)
         db.session.add(v)
         vessels.append(v)
     db.session.flush()
@@ -157,6 +166,7 @@ def generate_seed_data():
 
         v = Voyage(
             id=str(uuid.uuid4()),
+            organization_id=org.id,
             vessel_id=vessel.id,
             departure_lat=dep_lat, departure_lon=dep_lon,
             arrival_lat=arr_lat, arrival_lon=arr_lon,
@@ -166,7 +176,7 @@ def generate_seed_data():
         db.session.flush()
 
         # Generate realistic noon reports
-        _generate_noon_reports(v, vessel, days)
+        _generate_noon_reports(v, vessel, days)  # inherits v.organization_id
         voyages.append(v)
 
     # ── Claims ────────────────────────────────────────────────────────────────
@@ -174,6 +184,7 @@ def generate_seed_data():
         v0 = voyages[0]
         c1 = Claim(
             id=str(uuid.uuid4()),
+            organization_id=org.id,
             voyage_id=v0.id,
             vessel_id=vessels[0].id,
             claim_type='speed_loss',
@@ -246,6 +257,7 @@ def _generate_noon_reports(voyage, vessel, n_days):
 
         r = NoonReport(
             id=str(uuid.uuid4()),
+            organization_id=voyage.organization_id,
             voyage_id=voyage.id,
             vessel_id=vessel.id,  # required NOT NULL
             report_date=report_dt.date() if hasattr(report_dt, 'date') else report_dt,

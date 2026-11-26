@@ -11,11 +11,11 @@ Chat interface backed by OpenAI GPT-4o-mini with rule-based fallback.
 """
 import os
 from datetime import datetime
-from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, g, request, jsonify, current_app
 from ..security import limiter
 
 from app.extensions import db
+from app.tenancy import audit, current_org_id, get_scoped, scoped_query, tenant_required
 from app.models import (
     CopilotConversation, CopilotMessage,
     Vessel, Voyage, NoonReport, Claim, FuelAnalytic,
@@ -70,37 +70,37 @@ def _build_vessel_context(vessel_id: str | None, voyage_id: str | None) -> dict:
     context = {}
 
     if vessel_id:
-        vessel = Vessel.query.get(vessel_id)
+        vessel = get_scoped(Vessel, vessel_id)
         if vessel:
             context['vessel'] = vessel
 
     if voyage_id:
-        voyage = Voyage.query.get(voyage_id)
+        voyage = get_scoped(Voyage, voyage_id)
         if voyage:
             context['voyage'] = voyage
             context['reports'] = (
-                NoonReport.query
+                scoped_query(NoonReport)
                 .filter_by(voyage_id=voyage_id)
                 .order_by(NoonReport.report_date.desc())
                 .limit(10)
                 .all()
             )
             context['claims'] = (
-                Claim.query
+                scoped_query(Claim)
                 .filter_by(voyage_id=voyage_id)
                 .order_by(Claim.created_at.desc())
                 .all()
             )
     elif vessel_id:
         context['reports'] = (
-            NoonReport.query
+            scoped_query(NoonReport)
             .filter_by(vessel_id=vessel_id)
             .order_by(NoonReport.report_date.desc())
             .limit(10)
             .all()
         )
         context['claims'] = (
-            Claim.query
+            scoped_query(Claim)
             .filter_by(vessel_id=vessel_id)
             .order_by(Claim.created_at.desc())
             .limit(5)
@@ -422,7 +422,7 @@ def _call_openai(system_prompt: str, history: list, user_message: str, api_key: 
 # ---------------------------------------------------------------------------
 
 @copilot_bp.route('/chat', methods=['POST'])
-@jwt_required()
+@tenant_required('read')
 @limiter.limit('20 per minute')
 def chat():
     """
@@ -430,7 +430,7 @@ def chat():
     Main copilot chat endpoint.
     """
     try:
-        user_id = get_jwt_identity()
+        user_id = g.tenant.user_id
         data = request.get_json(force=True) or {}
 
         user_message = (data.get('message') or '').strip()
@@ -445,13 +445,17 @@ def chat():
 
         # ---- Load or create conversation --------------------------------- #
         if conversation_id:
-            conversation = CopilotConversation.query.filter_by(
+            conversation = scoped_query(CopilotConversation).filter_by(
                 id=conversation_id, user_id=user_id
             ).first()
             if not conversation:
                 return jsonify({'success': False, 'error': 'Conversation not found.'}), 404
         else:
+            # Context must belong to this organization; a foreign id looks like a missing one.
+            if (vessel_id and not get_scoped(Vessel, vessel_id)) or (voyage_id and not get_scoped(Voyage, voyage_id)):
+                return jsonify({'success': False, 'error': 'Vessel or voyage not found.'}), 404
             conversation = CopilotConversation(
+                organization_id=current_org_id(),
                 user_id=user_id,
                 vessel_id=vessel_id,
                 voyage_id=voyage_id,
@@ -534,13 +538,13 @@ def chat():
 
 
 @copilot_bp.route('/conversations', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def list_conversations():
     """GET /api/copilot/conversations — List current user's conversations."""
     try:
-        user_id = get_jwt_identity()
+        user_id = g.tenant.user_id
         conversations = (
-            CopilotConversation.query
+            scoped_query(CopilotConversation)
             .filter_by(user_id=user_id)
             .order_by(CopilotConversation.created_at.desc())
             .limit(50)
@@ -551,7 +555,7 @@ def list_conversations():
         for conv in conversations:
             last_msg = conv.messages.order_by(CopilotMessage.created_at.desc()).first()
             msg_count = conv.messages.count()
-            vessel = Vessel.query.get(conv.vessel_id) if conv.vessel_id else None
+            vessel = get_scoped(Vessel, conv.vessel_id) if conv.vessel_id else None
             result.append({
                 'id': conv.id,
                 'vessel_id': conv.vessel_id,
@@ -571,12 +575,12 @@ def list_conversations():
 
 
 @copilot_bp.route('/conversations/<conversation_id>', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_conversation(conversation_id):
     """GET /api/copilot/conversations/<id> — Get all messages in a conversation."""
     try:
-        user_id = get_jwt_identity()
-        conversation = CopilotConversation.query.filter_by(
+        user_id = g.tenant.user_id
+        conversation = scoped_query(CopilotConversation).filter_by(
             id=conversation_id, user_id=user_id
         ).first()
 
@@ -584,8 +588,8 @@ def get_conversation(conversation_id):
             return jsonify({'success': False, 'error': 'Conversation not found.'}), 404
 
         messages = [m.to_dict() for m in conversation.messages.order_by(CopilotMessage.created_at).all()]
-        vessel = Vessel.query.get(conversation.vessel_id) if conversation.vessel_id else None
-        voyage = Voyage.query.get(conversation.voyage_id) if conversation.voyage_id else None
+        vessel = get_scoped(Vessel, conversation.vessel_id) if conversation.vessel_id else None
+        voyage = get_scoped(Voyage, conversation.voyage_id) if conversation.voyage_id else None
 
         return jsonify({
             'success': True,

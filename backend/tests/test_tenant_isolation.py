@@ -2,14 +2,13 @@
 Cross-tenant isolation (audit finding P0-1).
 
 Every test asserts the SECURE behaviour: Company B must not see or change
-Company A's data. They are marked xfail(strict=True) because the application
-does not isolate tenants yet. Strict means: when the fix lands the tests start
-passing, xfail turns into a failure, and whoever fixed it must delete the
-marker. Run `pytest --runxfail` to see the leaks as real failures.
-"""
-import pytest
+Company A's data. They were written first, as strict xfails that failed for the
+right reasons (foreign vessel read 200, foreign voyage created 201, ...), and the
+markers were removed when routes were scoped by organization.
 
-leak = pytest.mark.xfail(strict=True, reason="P0-1: no tenant isolation (docs/TECHNICAL_AUDIT.md)")
+A record that belongs to another organization must look like it does not exist
+(404), never "forbidden", so ids cannot be used to probe another company.
+"""
 
 VESSEL = {"name": "MV Alpha", "imo_number": "9000001", "vessel_type": "Bulk Carrier"}
 
@@ -44,13 +43,11 @@ def test_unauthenticated_requests_are_rejected(client):
 
 # --- Isolation requirements ---
 
-@leak
 def test_other_company_cannot_read_vessel(client, two_companies):
     vessel_id = _vessel(client, two_companies["a"])
     assert client.get(f"/api/vessels/{vessel_id}", headers=two_companies["b"]).status_code == 404
 
 
-@leak
 def test_vessel_list_excludes_other_companies(client, two_companies):
     _vessel(client, two_companies["a"])
     resp = client.get("/api/vessels", headers=two_companies["b"])
@@ -59,7 +56,6 @@ def test_vessel_list_excludes_other_companies(client, two_companies):
     assert body["vessels"] == [] and body["total"] == 0
 
 
-@leak
 def test_other_company_cannot_modify_vessel(client, two_companies):
     vessel_id = _vessel(client, two_companies["a"])
     resp = client.put(f"/api/vessels/{vessel_id}", json={"name": "Hijacked"}, headers=two_companies["b"])
@@ -67,7 +63,6 @@ def test_other_company_cannot_modify_vessel(client, two_companies):
     assert client.get(f"/api/vessels/{vessel_id}", headers=two_companies["a"]).get_json()["name"] == "MV Alpha"
 
 
-@leak
 def test_other_company_cannot_create_voyage_on_foreign_vessel(client, two_companies):
     vessel_id = _vessel(client, two_companies["a"])
     resp = client.post("/api/voyages", headers=two_companies["b"], json={
@@ -76,20 +71,17 @@ def test_other_company_cannot_create_voyage_on_foreign_vessel(client, two_compan
     assert resp.status_code in (403, 404)
 
 
-@leak
 def test_other_company_cannot_read_voyage(client, two_companies):
     voyage_id = _voyage(client, two_companies["a"], _vessel(client, two_companies["a"]))
     assert client.get(f"/api/voyages/{voyage_id}", headers=two_companies["b"]).status_code == 404
 
 
-@leak
 def test_other_company_cannot_read_noon_reports(client, two_companies):
     voyage_id = _voyage(client, two_companies["a"], _vessel(client, two_companies["a"]))
     resp = client.get(f"/api/voyages/{voyage_id}/noon-reports", headers=two_companies["b"])
     assert resp.status_code == 404
 
 
-@leak
 def test_other_company_cannot_file_claim_on_foreign_voyage(client, two_companies):
     voyage_id = _voyage(client, two_companies["a"], _vessel(client, two_companies["a"]))
     resp = client.post("/api/claims", headers=two_companies["b"], json={
@@ -98,7 +90,6 @@ def test_other_company_cannot_file_claim_on_foreign_voyage(client, two_companies
     assert resp.status_code in (403, 404)
 
 
-@leak
 def test_voyage_numbers_do_not_collide_across_companies(client, two_companies):
     """Company B must be able to use a voyage number Company A already used."""
     _voyage(client, two_companies["a"], _vessel(client, two_companies["a"]), number="2026-01")

@@ -11,10 +11,10 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
 
 from ..extensions import db
 from ..models import Claim, NoonReport, Vessel, Voyage
+from ..tenancy import current_org_id, get_scoped, scoped_query, tenant_required
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -73,7 +73,9 @@ def _load(days, vessel_id=None):
     The window ends at the latest report rather than at "now", so a fleet that
     reports late (or a historical dataset) still shows its most recent period.
     """
-    latest_q = db.session.query(db.func.max(NoonReport.report_date))
+    org_id = current_org_id()
+    latest_q = db.session.query(db.func.max(NoonReport.report_date)).filter(
+        NoonReport.organization_id == org_id)
     if vessel_id:
         latest_q = latest_q.filter(NoonReport.vessel_id == vessel_id)
     latest = latest_q.scalar()
@@ -87,7 +89,7 @@ def _load(days, vessel_id=None):
         db.session.query(NoonReport, Vessel, Voyage)
         .join(Vessel, NoonReport.vessel_id == Vessel.id)
         .outerjoin(Voyage, NoonReport.voyage_id == Voyage.id)
-        .filter(NoonReport.report_date >= since)
+        .filter(NoonReport.organization_id == org_id, NoonReport.report_date >= since)
     )
     if vessel_id:
         q = q.filter(NoonReport.vessel_id == vessel_id)
@@ -112,7 +114,7 @@ def _day(d):
 # ---------------------------------------------------------------------------
 
 @analytics_bp.route('/dashboard', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_dashboard():
     """Fleet KPIs for the last 30 days."""
     from .vessels import _compute_health_score
@@ -120,9 +122,9 @@ def get_dashboard():
     days = 30
     rows = _load(days)
 
-    active_vessels = Vessel.query.filter_by(status='active').count()
-    active_voyages = Voyage.query.filter(Voyage.status.in_(['active', 'in_progress'])).count()
-    open_claims = Claim.query.filter_by(status='open').count()
+    active_vessels = scoped_query(Vessel).filter_by(status='active').count()
+    active_voyages = scoped_query(Voyage).filter(Voyage.status.in_(['active', 'in_progress'])).count()
+    open_claims = scoped_query(Claim).filter_by(status='open').count()
 
     out = {
         'total_distance_nm': None, 'avg_speed': None, 'total_fuel_consumed': None,
@@ -209,13 +211,15 @@ def get_dashboard():
 # ---------------------------------------------------------------------------
 
 @analytics_bp.route('/fuel', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_fuel_analytics():
     days = min(max(request.args.get('days', 30, type=int), 1), 365)
     vessel_id = request.args.get('vessel_id') or None
     rows = _load(days, vessel_id)
 
-    vessel = db.session.get(Vessel, vessel_id) if vessel_id else None
+    vessel = get_scoped(Vessel, vessel_id) if vessel_id else None
+    if vessel_id and vessel is None:
+        return jsonify({'error': 'Vessel not found'}), 404
     warranted = None
     if vessel is not None:
         warranted = {
@@ -292,7 +296,7 @@ def get_fuel_analytics():
 # ---------------------------------------------------------------------------
 
 @analytics_bp.route('/performance', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_performance_trends():
     days = min(max(request.args.get('days', 90, type=int), 1), 730)
     vessel_id = request.args.get('vessel_id') or None
@@ -342,7 +346,7 @@ BANDS = [
 
 
 @analytics_bp.route('/weather-impact', methods=['GET'])
-@jwt_required()
+@tenant_required('read')
 def get_weather_impact():
     """Speed and fuel deviation from warranted values, grouped by Beaufort force."""
     days = min(max(request.args.get('days', 90, type=int), 1), 730)
